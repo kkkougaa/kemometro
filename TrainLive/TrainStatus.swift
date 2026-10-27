@@ -105,10 +105,13 @@ enum TrainStatus {
         let sorted = zip(group.map(parse), infos).sorted { $0.0.order < $1.0.order }.map { $0.1 }
         var out = Array(sorted.prefix(max(1, limit)))
         // 이 방향으로 막 떠난 열차(출발). 이미 보여 주는 열차와 겹치면 뺀다
-        if let gone = rows.first(where: {
-            Lines.canonical($0.subwayId) == Lines.canonical(lineId) && $0.arvlCd == "2" && !$0.btrainNo.isEmpty
-                && ($0.updnLine.isEmpty ? "?" : $0.updnLine) == key && !out.contains(where: { t in t.id == $0.btrainNo })
-        }) {
+        let shownIds = Set(out.map(\.id))
+        let sameLine = Lines.canonical(lineId)
+        let gone = rows.first { r in
+            Lines.canonical(r.subwayId) == sameLine && r.arvlCd == "2" && !r.btrainNo.isEmpty
+                && (r.updnLine.isEmpty ? "?" : r.updnLine) == key && !shownIds.contains(r.btrainNo)
+        }
+        if let gone {
             let d = TrainStatus.dest(of: gone.trainLineNm)
             out.append(TrainInfo(id: gone.btrainNo, status: "출발", n: 0, level: 0, dest: d.full, at: "",
                                  tags: tags(of: gone), approx: false, updn: gone.updnLine, departed: true))
