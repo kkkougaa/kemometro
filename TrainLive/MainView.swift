@@ -486,6 +486,7 @@ struct RouteResultView: View {
         self.onStarted = onStarted
         _fromName = State(initialValue: from)
         _toName = State(initialValue: to)
+        _loading = State(initialValue: !from.isEmpty && !to.isEmpty)
     }
 
     private var searchedAt: Date { outcome?.routes.first?.searchedAt ?? Date() }
@@ -500,6 +501,11 @@ struct RouteResultView: View {
                     header
                     if loading {
                         ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
+                    } else if outcome == nil {
+                        Text("출발역과 도착역을 모두 고르면 경로를 찾아요")
+                            .font(.system(size: 15)).foregroundStyle(.secondary)
+                            .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                            .liquidGlassCard(cornerRadius: 24)
                     } else if let o = outcome {
                         if o.routes.isEmpty {
                             Text(o.note.isEmpty ? "경로를 찾지 못했어요" : o.note)
@@ -519,7 +525,13 @@ struct RouteResultView: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await load() }
+        .task {
+            if toName.isEmpty || fromName.isEmpty {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                begin(toName.isEmpty ? .to : .from)
+            }
+            await load()
+        }
     }
 
     private var header: some View {
@@ -565,7 +577,9 @@ struct RouteResultView: View {
             } else {
                 Button { begin(field) } label: {
                     HStack {
-                        Text(shown(name)).lineLimit(1).foregroundStyle(.primary)
+                        Text(name.isEmpty ? (isFrom ? "출발역을 고르세요" : "도착역을 고르세요") : shown(name))
+                            .lineLimit(1)
+                            .foregroundStyle(name.isEmpty ? Color.secondary : Color.primary)
                         Spacer(minLength: 0)
                     }
                     .contentShape(Rectangle())
@@ -766,11 +780,21 @@ struct RouteResultView: View {
     // MARK: 동작
 
     private func load() async {
-        loading = true
         arrivals = [:]
         picked = [:]
         startedId = nil
         alertOff = []
+        guard !fromName.isEmpty, !toName.isEmpty else {
+            outcome = nil
+            loading = false
+            return
+        }
+        if StationOrders.norm(fromName) == StationOrders.norm(toName) {
+            outcome = RouteSearch.Outcome(routes: [], source: "", note: "출발역과 도착역이 같아요")
+            loading = false
+            return
+        }
+        loading = true
         let o = await RouteSearch.search(from: fromName, to: toName, key: store.config.staticKey)
         outcome = o
         loading = false
