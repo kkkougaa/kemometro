@@ -464,11 +464,16 @@ struct ArrivalChoice: Identifiable, Hashable {
 }
 
 struct RouteResultView: View {
-    let from: String
-    let to: String
+    enum Field { case from, to }
+
     let onStarted: (String) -> Void
 
     @EnvironmentObject var store: ConfigStore
+    @State private var fromName: String
+    @State private var toName: String
+    @State private var editing: Field?
+    @State private var text = ""
+    @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var outcome: RouteSearch.Outcome?
     @State private var arrivals: [String: [ArrivalChoice]] = [:]
@@ -477,7 +482,15 @@ struct RouteResultView: View {
     @State private var startedId: String?
     @State private var loading = true
 
+    init(from: String, to: String, onStarted: @escaping (String) -> Void) {
+        self.onStarted = onStarted
+        _fromName = State(initialValue: from)
+        _toName = State(initialValue: to)
+    }
+
     private var searchedAt: Date { outcome?.routes.first?.searchedAt ?? Date() }
+
+    private func shown(_ name: String) -> String { name.hasSuffix("역") ? name : name + "역" }
 
     var body: some View {
         ZStack {
@@ -510,24 +523,111 @@ struct RouteResultView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 16, weight: .bold)).foregroundStyle(.primary)
-                    .frame(width: 40, height: 40).liquidGlass()
-            }.tapHaptic()
-            .buttonStyle(.plain)
-            HStack(spacing: 8) {
-                Circle().strokeBorder(Color.green, lineWidth: 4).frame(width: 14, height: 14)
-                Text(from + "역").lineLimit(1)
-                Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold)).foregroundStyle(.secondary)
-                Circle().strokeBorder(Color.red, lineWidth: 4).frame(width: 14, height: 14)
-                Text(to + "역").lineLimit(1)
-                Spacer(minLength: 0)
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 16, weight: .bold)).foregroundStyle(.primary)
+                        .frame(width: 40, height: 40).liquidGlass()
+                }.tapHaptic()
+                .buttonStyle(.plain)
+                VStack(spacing: 0) {
+                    stationRow(.from)
+                    Divider()
+                    stationRow(.to)
+                }
+                .padding(.horizontal, 14)
+                .liquidGlassRect(cornerRadius: 18)
+                Button { swapStations() } label: {
+                    Image(systemName: "arrow.up.arrow.down").font(.system(size: 15, weight: .bold)).foregroundStyle(.primary)
+                        .frame(width: 40, height: 40).liquidGlass()
+                }.tapHaptic()
+                .buttonStyle(.plain)
             }
-            .font(.system(size: 16, weight: .semibold))
-            .padding(.horizontal, 14).frame(height: 44)
-            .liquidGlassRect(cornerRadius: 16)
+            if editing != nil { suggestionList }
         }
+    }
+
+    private func stationRow(_ field: Field) -> some View {
+        let isFrom = field == .from
+        let name = isFrom ? fromName : toName
+        return HStack(spacing: 10) {
+            Circle().strokeBorder(isFrom ? Color.green : Color.red, lineWidth: 4).frame(width: 14, height: 14)
+            if editing == field {
+                TextField(isFrom ? "출발역" : "도착역", text: $text)
+                    .focused($focused)
+                    .submitLabel(.done)
+                    .autocorrectionDisabled()
+                    .onSubmit { if let first = Router.suggestions(text, limit: 1).first { choose(first, field) } }
+                if !text.isEmpty {
+                    Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain)
+                }
+            } else {
+                Button { begin(field) } label: {
+                    HStack {
+                        Text(shown(name)).lineLimit(1).foregroundStyle(.primary)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }.tapHaptic()
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.system(size: 16, weight: .semibold))
+        .frame(height: 46)
+    }
+
+    private func begin(_ field: Field) {
+        editing = field
+        text = ""
+        focused = true
+    }
+
+    private func choose(_ name: String, _ field: Field) {
+        if field == .from { fromName = name } else { toName = name }
+        editing = nil
+        focused = false
+        text = ""
+        Task { await load() }
+    }
+
+    private func swapStations() {
+        let f = fromName
+        fromName = toName
+        toName = f
+        editing = nil
+        focused = false
+        Task { await load() }
+    }
+
+    /// 입력한 글자가 들어간 역을 드롭다운으로
+    private var suggestionList: some View {
+        let names = Router.suggestions(text, limit: 6)
+        return VStack(spacing: 0) {
+            if text.isEmpty {
+                Text("역 이름을 입력해 주세요").font(.system(size: 14)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            } else if names.isEmpty {
+                Text("일치하는 역이 없어요").font(.system(size: 14)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            }
+            ForEach(Array(names.enumerated()), id: \.element) { i, name in
+                Button { if let f = editing { choose(name, f) } } label: {
+                    HStack(spacing: 10) {
+                        Text(name).font(.system(size: 16, weight: .semibold)).foregroundStyle(.primary)
+                        Spacer(minLength: 8)
+                        HStack(spacing: -4) {
+                            ForEach(Router.lineIds(of: name).prefix(4), id: \.self) { LineMark(lineId: $0, size: 20) }
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                }.tapHaptic()
+                .buttonStyle(.plain)
+                if i < names.count - 1 { Divider().padding(.leading, 16) }
+            }
+        }
+        .liquidGlassCard(cornerRadius: 22)
     }
 
     private func isFewest(_ r: Route, in all: [Route]) -> Bool {
@@ -558,7 +658,7 @@ struct RouteResultView: View {
                     Text("하차").font(.system(size: 16, weight: .semibold)).foregroundStyle(.secondary)
                 }
                 .frame(width: 112, alignment: .leading)
-                Text(to + "역").font(.system(size: 16)).lineLimit(1)
+                Text(shown(toName)).font(.system(size: 16)).lineLimit(1)
                 Spacer(minLength: 8)
                 Button {
                     if alertOff.contains(r.id) { alertOff.remove(r.id) } else { alertOff.insert(r.id) }
@@ -667,7 +767,11 @@ struct RouteResultView: View {
 
     private func load() async {
         loading = true
-        let o = await RouteSearch.search(from: from, to: to, key: store.config.staticKey)
+        arrivals = [:]
+        picked = [:]
+        startedId = nil
+        alertOff = []
+        let o = await RouteSearch.search(from: fromName, to: toName, key: store.config.staticKey)
         outcome = o
         loading = false
         // 첫 구간 실시간 도착
