@@ -27,7 +27,7 @@ final class MainModel: ObservableObject {
     /// 카드마다 고른 열차
     @Published var selection: [String: String] = [:]
     /// 위치 대신 사용자가 고른 역
-    @Published var override: String?
+    @Published var chosenStation: String?
 
     func refresh(config: AppConfig, location: CLLocation?) async {
         guard let pick = pickStation(config: config, location: location) else {
@@ -53,7 +53,7 @@ final class MainModel: ObservableObject {
     }
 
     private func pickStation(config: AppConfig, location: CLLocation?) -> (name: String, meters: Double?)? {
-        if let o = override { return (o, nil) }
+        if let o = chosenStation { return (o, nil) }
         if let loc = location {
             if let n = StationMaster.shared.nearest(to: loc, limit: 1).first { return (n.name, n.meters) }
             let places = config.places.filter { $0.latitude != 0 }
@@ -191,7 +191,7 @@ struct MainView: View {
     /// 로고를 누르면 위치를 다시 받아 가까운 역을 새로 찾는다
     private func refreshNearest() {
         withAnimation(.spring(duration: 0.7, bounce: 0.25)) { spins += 1 }
-        model.override = nil
+        model.chosenStation = nil
         Task {
             if master.stations.isEmpty && !store.config.staticKey.isEmpty { await master.refresh(apiKey: store.config.staticKey) }
             location.requestOneShot { loc in

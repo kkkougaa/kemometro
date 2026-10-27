@@ -121,6 +121,7 @@ struct DestChip: View {
             .frame(height: 17)
             .background(color.opacity(0.22), in: Capsule())
             .lineLimit(1)
+            .fixedSize()
     }
 }
 
@@ -129,7 +130,7 @@ struct ShiftButtons: View {
     let placeId: String
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             Button(intent: ShiftTrainIntent(placeId: placeId, delta: -1)) { chevron("chevron.left") }
             Button(intent: ShiftTrainIntent(placeId: placeId, delta: 1)) { chevron("chevron.right") }
         }
@@ -140,7 +141,7 @@ struct ShiftButtons: View {
         Image(systemName: name)
             .font(.system(size: 9, weight: .heavy))
             .foregroundStyle(.primary)
-            .frame(width: 24, height: 17)
+            .frame(width: 20, height: 17)
             .background(Color.primary.opacity(0.14), in: Capsule())
             .contentShape(Rectangle().inset(by: -5))
     }
@@ -149,7 +150,7 @@ struct ShiftButtons: View {
 private func subLine(_ c: ActivityContext) -> some View {
     Group {
         if let chip = c.destChip {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 DestChip(text: chip, color: c.color)
                 if c.s.riding { ShiftButtons(placeId: c.a.placeId) }
             }

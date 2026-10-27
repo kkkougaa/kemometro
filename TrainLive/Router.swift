@@ -166,14 +166,14 @@ enum Router {
     private static func search(_ src: String, _ dst: String, _ penalty: Double) -> [Node]? {
         var dist: [Node: Double] = [:]
         var prev: [Node: Node] = [:]
-        var open: [Node] = []
+        var frontier: [Node] = []
         var done = Set<Node>()
-        for n in graph.byName[src] ?? [] { dist[n] = 0; open.append(n) }
+        for n in graph.byName[src] ?? [] { dist[n] = 0; frontier.append(n) }
         var goal: Node?
-        while !open.isEmpty {
+        while !frontier.isEmpty {
             var bi = 0
-            for i in 1..<max(1, open.count) where dist[open[i]]! < dist[open[bi]]! { bi = i }
-            let u = open.remove(at: bi)
+            for i in 1..<max(1, frontier.count) where dist[frontier[i]]! < dist[frontier[bi]]! { bi = i }
+            let u = frontier.remove(at: bi)
             if done.contains(u) { continue }
             done.insert(u)
             if u.name == dst { goal = u; break }
@@ -183,7 +183,7 @@ enum Router {
                 if d + w < (dist[v] ?? .infinity) {
                     dist[v] = d + w
                     prev[v] = u
-                    open.append(v)
+                    frontier.append(v)
                 }
             }
             for v in graph.adj[u] ?? [] { relax(v, hopMinutes(u.lineId)) }
