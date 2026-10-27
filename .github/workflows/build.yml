@@ -52,6 +52,10 @@ jobs:
           grep -n "error:" build.log | head -50 || true
           echo "===== 마지막 80줄 ====="
           tail -80 build.log
+          # 오류 줄을 주석으로도 남겨서 로그를 열지 않고도 볼 수 있게
+          grep "error:" build.log | sed 's#.*/kemometro/kemometro/##' | sort -u | head -10 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done || true
 
       - name: ipa 묶기
         run: |

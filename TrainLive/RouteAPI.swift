@@ -123,7 +123,7 @@ enum RouteAPI {
             }
             cur?.stations.append(arvName)
             cur?.sec += int(row["reqHr"]) ?? 0
-            cur?.arr = str(row["trainArvlTm"]) ?? cur?.arr
+            if let arrTime = str(row["trainArvlTm"]) { cur?.arr = arrTime }
             if str(row["etrnYn"]) == "Y" { cur?.express = true }
         }
         if let c = cur { drafts.append(c) }
