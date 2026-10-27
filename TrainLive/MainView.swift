@@ -291,8 +291,17 @@ struct MainView: View {
                           updn: card.updn, latitude: location.lastLocation?.coordinate.latitude ?? 0,
                           longitude: location.lastLocation?.coordinate.longitude ?? 0)
         let no = UUID(uuidString: train.id) == nil ? train.id : ""
-        Task { await ActivityController.shared.startTracking(place: place, trainNo: no, target: nil) }
-        show("라이브 액티비티로 추적을 시작했어요")
+        Task {
+            await ActivityController.shared.startTracking(place: place, trainNo: no, target: nil)
+            // 시작에 실패하면 이유를 바로 보여 준다(설정의 기록에도 남는다)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            let log = ActivityController.shared.log.prefix(6)
+            if let fail = log.first(where: { $0.contains("실패") || $0.contains("꺼져") || $0.contains("모르는") }) {
+                show("추적을 시작하지 못했어요 · " + fail.components(separatedBy: " ").dropFirst(2).joined(separator: " "))
+            } else {
+                show("라이브 액티비티로 추적을 시작했어요")
+            }
+        }
     }
 }
 
@@ -353,18 +362,21 @@ struct DirectionCardView: View {
                     Text(heroSub).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
-            TrackStrip(trains: card.trains, selectedId: selected?.id, station: station, color: color, tags: selected?.tags ?? []) { selectedId = $0 }
-                .frame(height: 80)
-            Button {
-                if let s = selected { onTrack(s) }
-            } label: {
-                Text("추적")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).frame(height: 46)
-                    .liquidGlassRect(cornerRadius: 23, tint: color)
-            }.tapHaptic()
-            .buttonStyle(.plain)
+            HStack(alignment: .top, spacing: 8) {
+                TrackStrip(trains: card.trains, selectedId: selected?.id, station: station, color: color, tags: selected?.tags ?? []) { selectedId = $0 }
+                    .frame(height: 80)
+                Button {
+                    if let s = selected { onTrack(s) }
+                } label: {
+                    Text("추적")
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .frame(width: 62, height: 38)
+                        .liquidGlassRect(cornerRadius: 19, tint: color)
+                }.tapHaptic()
+                .buttonStyle(.plain)
+                .padding(.top, 27)
+            }
         }
         .padding(16)
         .liquidGlassCard(cornerRadius: 26)
