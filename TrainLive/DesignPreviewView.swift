@@ -6,7 +6,7 @@ struct DesignPreviewView: View {
     @State private var phase = 0
     @State private var later = false
     @State private var endsAt = Date().addingTimeInterval(30)
-    @State private var rideStep = 1
+    @State private var rideStep = 2
 
     private var attributes: TrainActivityAttributes { DemoData.attributes }
     private var state: ActivityState { DemoData.state(phase: phase, slots: attributes.slots, endsAt: endsAt, later: later) }
@@ -99,7 +99,7 @@ struct DesignPreviewView: View {
                     GlassPillButton(title: "다시 재생", systemImage: "arrow.counterclockwise", tint: line.color, prominent: true) { replay() }
                     GlassPillButton(title: later ? "처음 위치" : "열차 전진", systemImage: "tram") { withAnimation { later.toggle() } }
                     GlassPillButton(title: "다음 역", systemImage: "arrow.right") {
-                        withAnimation { rideStep = (rideStep + 1) % DemoData.ridePath.count }
+                        withAnimation { rideStep = (rideStep + 1) % (DemoData.ridePath.count * 4 - 3) }
                     }
                 }
             }

@@ -309,10 +309,19 @@ final class ActivityController: ObservableObject {
         guard let activity else { return }
 
         let interval = max(5, cfg.rideRefreshSeconds)
+        var departedKey = ""
         while !Task.isCancelled && Date() < deadline {
             let (ride, err) = await fetchRide(place: place, cfg: cfg, trainNo: &trainNo)
             if Task.isCancelled { return }
-            if let ride {
+            if var ride {
+                // 출발 상태가 같은 역에서 두 번째로 읽히면 이동 중
+                let key = ride.trainNo + "|" + ride.current
+                if ride.status == 2 {
+                    ride.moving = (key == departedKey)
+                    departedKey = key
+                } else {
+                    departedKey = ""
+                }
                 state.ride = ride
                 state.message = nil
                 state.fetchedAt = Date()

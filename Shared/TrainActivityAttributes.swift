@@ -70,6 +70,25 @@ struct RideInfo: Codable, Hashable {
     var pathIndex: Int
     /// 종착역 "신사행"
     var dest: String
+    /// 출발한 뒤 한 번 더 같은 상태로 읽힌 경우. 다음 역으로 이동 중
+    var moving: Bool? = nil
+
+    /// "탑승 중" 자리에 보일 상태
+    var label: String {
+        if moving == true { return "이동중" }
+        switch status {
+        case 0: return "진입중"
+        case 1: return "도착"
+        default: return "출발"
+        }
+    }
+    /// 큰 글자로 보일 역. 이동 중이면 다음 역
+    var shownStation: String { moving == true ? (next ?? current) : current }
+    /// 그 아래 "다음 OO"
+    var followingStation: String? {
+        if moving == true { return pathIndex >= 0 && pathIndex + 2 < path.count ? path[pathIndex + 2] : nil }
+        return next
+    }
 }
 
 /// 환승 선택지 하나. 노선 선택이면 lineId, 방면 선택이면 dest·updn

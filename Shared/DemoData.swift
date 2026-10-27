@@ -25,12 +25,15 @@ enum DemoData {
 
     /// 탑승 추적 데모: 판교 → 신논현. step 이 커질수록 한 역씩 간다.
     static let ridePath = ["판교", "청계산입구", "양재시민의숲", "양재", "강남", "신논현", "논현", "신사"]
+    /// 한 역마다 4걸음: 도착 → 출발 → 이동중 → 다음 역 진입중
     static func ride(step: Int) -> RideInfo {
-        let i = min(step, ridePath.count - 1)
-        let status = i == ridePath.count - 1 ? 1 : (step % 2 == 0 ? 2 : 1)
+        let last = ridePath.count - 1
+        let i = min(step / 4 + (step % 4 == 3 ? 1 : 0), last)
+        let phase = i >= last ? 0 : step % 4
+        let status = phase == 0 ? 1 : (phase == 3 ? 0 : 2)
         return RideInfo(trainNo: "3", current: ridePath[i], status: status,
                         next: i + 1 < ridePath.count ? ridePath[i + 1] : nil,
-                        path: ridePath, pathIndex: i, dest: "신사행")
+                        path: ridePath, pathIndex: i, dest: "신사행", moving: phase == 2)
     }
     static func rideState(step: Int) -> TrainActivityAttributes.ContentState {
         var s = TrainActivityAttributes.ContentState(trains: trainsLater, fetchedAt: Date(), phase: 1, message: nil, endsAt: Date().addingTimeInterval(3600))

@@ -265,7 +265,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
       var t = S.trains[0];
       left = S.station; lsub = '<span class="dchip">' + S.dest + '</span>'; hero = t ? t.status : '열차 없음'; rsub = t ? (t.lv === 2 ? '곧 도착' : (t.at ? '지금 ' + t.at : '')) : ''; lv2 = !!(t && t.lv === 2);
     } else if (S.mode === 'ride') {
-      left = '탑승 중'; lsub = '<span class="dchip">' + S.dest + '</span>'; hero = S.ride.current; rsub = S.ride.next ? '다음 ' + S.ride.next : '';
+      var rd = S.ride, mv = rd.ph === 'move'; left = RIDE_LABEL[rd.ph]; lsub = '<span class="dchip">' + S.dest + '</span>'; hero = mv ? (rd.next || rd.current) : rd.current; var nx = mv ? RIDE_PATH[rd.step + 2] : rd.next; rsub = nx ? '다음 ' + nx : '';
     } else if (S.mode === 'transfer-line') {
       left = '환승'; lsub = S.station; hero = ''; rsub = '어느 노선으로?';
     } else {
@@ -346,7 +346,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
       } else b.innerHTML = choicesHtml();
     });
     var t = S.trains[0];
-    roll($('cst'), S.mode === 'ride' ? S.ride.current : (S.mode === 'approach' ? (t ? t.status : '–') : '환승'));
+    roll($('cst'), S.mode === 'ride' ? (S.ride.ph === 'move' ? (S.ride.next || S.ride.current) : S.ride.current) : (S.mode === 'approach' ? (t ? t.status : '–') : '환승'));
     lastMode = S.mode;
     bindButtons();
   }
@@ -397,17 +397,19 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
     if (view === 'island') { island.classList.remove('expanded', 'compact'); island.classList.add('gone'); }
     else { lock.classList.remove('on'); lock.classList.add('off'); }
   }
-  function setRide(stepNo, departed) {
-    S.ride = { step: stepNo, departed: departed, current: RIDE_PATH[stepNo], next: RIDE_PATH[stepNo + 1] || '' };
+  var RIDE_LABEL = { enter: '진입중', arrive: '도착', depart: '출발', move: '이동중' };
+  function setRide(stepNo, ph) {
+    S.ride = { step: stepNo, ph: ph, departed: ph === 'depart' || ph === 'move', current: RIDE_PATH[stepNo], next: RIDE_PATH[stepNo + 1] || '' };
   }
   function board() {
     timers.forEach(clearTimeout); timers = [];
-    S.mode = 'ride'; setRide(0, false); render(true);
+    S.mode = 'ride'; setRide(0, 'arrive'); render(true);
     say('탑승. 마커는 제자리, 노선이 옆으로 흘러요. 접으면 아일랜드엔 지금 역 이름.');
     clearInterval(rideTimer);
     rideTimer = setInterval(function () {
       var r = S.ride; if (r.step >= RIDE_PATH.length - 1) { clearInterval(rideTimer); return; }
-      if (r.departed) setRide(r.step + 1, false); else setRide(r.step, true);
+      var nx = { arrive: ['depart', 0], depart: ['move', 0], move: ['enter', 1], enter: ['arrive', 0] }[r.ph];
+      setRide(r.step + nx[1], nx[0]);
       render(true);
     }, 1400);
   }
@@ -439,8 +441,8 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
     var compact = kind === 'compact' || kind === 'ridecompact';
     noAnim(function () { if (view === 'lock') lock.classList.add('on'); else island.classList.add(compact ? 'compact' : 'expanded'); });
     if (kind === 'ride' || kind === 'ridecompact') {
-      S.mode = 'ride'; setRide(2, false);
-      setTimeout(function () { render(true); }, 60); say(kind === 'ride' ? '탑승 추적: 지금 양재시민의숲, 다음 양재.' : '탑승 중 컴팩트: 마크 + 지금 역 이름(길면 …).');
+      S.mode = 'ride'; setRide(2, 'move');
+      setTimeout(function () { render(true); }, 60); say(kind === 'ride' ? '탑승 추적: 이동중이면 다음 역(양재)이 크게 나와요.' : '탑승 중 컴팩트: 마크 + 지금 역 이름(길면 …).');
       return;
     }
     if (kind === 'transfer') { S.station = '신논현'; S.mode = 'transfer-line'; render(false); say('하차: 다른 노선이 있으면 환승할지 물어봐요.'); return; }

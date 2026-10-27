@@ -23,7 +23,7 @@ struct ActivityContext {
     /// 왼쪽 큰 글자
     var title: String {
         switch s.mode {
-        case 1: return "탑승 중"
+        case 1: return s.ride?.label ?? "탑승 중"
         case 2: return "환승"
         case 3: return line.name
         default: return stationName
@@ -42,7 +42,7 @@ struct ActivityContext {
     /// 오른쪽 큰 글자
     var hero: String? {
         switch s.mode {
-        case 1: return s.ride?.current ?? "–"
+        case 1: return s.ride?.shownStation ?? "–"
         case 2, 3: return nil
         default: return s.first?.status ?? (s.message == nil ? "열차 없음" : "–")
         }
@@ -52,7 +52,7 @@ struct ActivityContext {
     var heroSub: String {
         switch s.mode {
         case 1:
-            return s.ride?.next.map { "다음 " + $0 } ?? (s.message ?? "")
+            return s.ride?.followingStation.map { "다음 " + $0 } ?? (s.message ?? "")
         case 2: return "어느 노선으로?"
         case 3: return "어디행?"
         default:
