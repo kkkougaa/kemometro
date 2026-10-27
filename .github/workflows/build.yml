@@ -1,0 +1,194 @@
+# 맥 없이 ipa 만들기 + 시뮬레이터로 모양 확인.
+#   build      : 무서명 기기용 빌드 → Payload/*.app 을 zip 으로 묶어 .ipa 아티팩트
+#   simulator  : 시뮬레이터용 빌드 → iPhone Pro 시뮬레이터에 설치 → 디자인 미리보기 스크린샷,
+#                데모 모드로 라이브 액티비티를 띄워 아일랜드 스크린샷과 등장 애니메이션 영상
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 최신 Xcode 선택
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "using $XC"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - name: XcodeGen 설치
+        run: brew install xcodegen
+
+      - name: 프로젝트 생성
+        run: xcodegen generate --spec project.yml
+
+      - name: 빌드 (무서명)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TrainLive.xcodeproj \
+            -scheme TrainLive \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build 2>&1 | tee build.log
+
+      - name: 오류 요약
+        if: failure()
+        run: |
+          echo "===== error 줄 ====="
+          grep -n "error:" build.log | head -50 || true
+          echo "===== 마지막 80줄 ====="
+          tail -80 build.log
+
+      - name: ipa 묶기
+        run: |
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          echo "app: $APP"
+          test -n "$APP"
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          ls -la Payload/*.app/PlugIns || true
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "Payload/$(basename "$APP")/Info.plist" || echo dev)
+          zip -qr "TrainLive-${VERSION}-unsigned.ipa" Payload
+          ls -la *.ipa
+
+      - name: ipa 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrainLive-unsigned-ipa
+          path: "*.ipa"
+          if-no-files-found: error
+
+      - name: 빌드 로그 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 최신 Xcode 선택
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "using $XC"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - name: XcodeGen 설치
+        run: brew install xcodegen
+
+      - name: 프로젝트 생성
+        run: xcodegen generate --spec project.yml
+
+      - name: 시뮬레이터 고르기
+        id: sim
+        run: |
+          # 다이내믹 아일랜드가 있는 iPhone Pro 중 가장 최신. 없으면 아무 iPhone.
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys,re
+          d=json.load(sys.stdin)["devices"]
+          cands=[]
+          for rt,devs in d.items():
+              if "iOS" not in rt: continue
+              ver=tuple(int(x) for x in re.findall(r"\d+", rt.split("iOS-")[-1])[:2]) if "iOS-" in rt else (0,0)
+              for dev in devs:
+                  n=dev["name"]
+                  pro = ("Pro" in n) and ("iPhone" in n) and ("Max" not in n)
+                  cands.append((pro, ver, n, dev["udid"]))
+          cands.sort(reverse=True)
+          print(cands[0][3] if cands else "")
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep -i "$UDID" || true
+          test -n "$UDID"
+
+      - name: 시뮬레이터용 빌드
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TrainLive.xcodeproj \
+            -scheme TrainLive \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee build-sim.log
+
+      - name: 부팅·설치
+        run: |
+          UDID="${{ steps.sim.outputs.udid }}"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl ui "$UDID" appearance dark || true
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          APP=$(find build-sim/Build/Products/Debug-iphonesimulator -maxdepth 1 -name "*.app" | head -1)
+          test -n "$APP"
+          xcrun simctl install "$UDID" "$APP"
+          # 위치 권한 등은 안 물어보게 (데모는 위치를 안 쓴다)
+          xcrun simctl privacy "$UDID" grant location-always kr.neogul.trainlive || true
+          mkdir -p shots
+
+      - name: 디자인 미리보기 스크린샷
+        run: |
+          UDID="${{ steps.sim.outputs.udid }}"
+          xcrun simctl launch "$UDID" kr.neogul.trainlive -preview
+          sleep 4
+          xcrun simctl io "$UDID" screenshot shots/01-preview.png
+          xcrun simctl terminate "$UDID" kr.neogul.trainlive || true
+
+      - name: 데모 액티비티 영상·스크린샷
+        run: |
+          UDID="${{ steps.sim.outputs.udid }}"
+          # 설정 앱을 먼저 띄워 두면 우리 앱이 뜬 뒤 다시 설정으로 돌아가 백그라운드가 된다
+          xcrun simctl launch "$UDID" com.apple.Preferences || true
+          sleep 2
+          xcrun simctl io "$UDID" recordVideo --codec h264 --force shots/02-demo.mp4 &
+          REC=$!
+          sleep 1
+          SIMCTL_CHILD_TRAINLIVE_DEMO=1 xcrun simctl launch "$UDID" kr.neogul.trainlive -demo
+          sleep 2.5
+          # 홈 화면/설정으로 돌아가 아일랜드에 액티비티가 보이게
+          xcrun simctl launch "$UDID" com.apple.Preferences || true
+          sleep 3
+          xcrun simctl io "$UDID" screenshot shots/03-island-compact.png
+          sleep 9
+          xcrun simctl io "$UDID" screenshot shots/04-island-later.png
+          sleep 3
+          kill -INT $REC || true
+          sleep 3
+          ls -la shots
+
+      - name: 스크린샷·영상 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-shots
+          path: shots/*
+          if-no-files-found: warn
+
+      - name: 시뮬레이터 빌드 로그
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-sim-log
+          path: build-sim.log

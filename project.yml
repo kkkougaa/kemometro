@@ -1,0 +1,98 @@
+# XcodeGen 프로젝트 정의. GitHub Actions 의 macOS 러너에서 `xcodegen generate` 로 .xcodeproj 를 만든다.
+# 로컬에 Xcode 가 없어도 이 파일과 소스만 있으면 된다.
+name: TrainLive
+options:
+  bundleIdPrefix: kr.neogul
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    # 무서명 빌드. 서명은 Sideloadly 가 설치할 때 한다.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+
+targets:
+  TrainLive:
+    type: application
+    platform: iOS
+    sources:
+      - path: TrainLive
+      - path: Shared
+    dependencies:
+      - target: TrainLiveWidget
+        embed: true
+        codeSign: false
+    info:
+      path: TrainLive/Info.plist
+      properties:
+        CFBundleDisplayName: 열차 위치
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [location]
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        NSLocationWhenInUseUsageDescription: 역에 가까워졌는지 알기 위해 위치를 씁니다.
+        NSLocationAlwaysAndWhenInUseUsageDescription: 앱을 닫아 둔 채로도 역에 가까워지면 열차 위치를 띄우려면 "항상" 허용이 필요합니다.
+        # 서울시 실시간 도착정보 API 가 http 전용이라 이 도메인만 평문 허용
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            swopenapi.seoul.go.kr:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+            seoul.go.kr:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+            openapi.seoul.go.kr:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive
+        PRODUCT_NAME: TrainLive
+        INFOPLIST_KEY_CFBundleDisplayName: 열차 위치
+        SWIFT_EMIT_LOC_STRINGS: "NO"
+
+  TrainLiveWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TrainLiveWidget
+      - path: Shared
+    info:
+      path: TrainLiveWidget/Info.plist
+      properties:
+        CFBundleDisplayName: 열차 위치
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive.widget
+        PRODUCT_NAME: TrainLiveWidget
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
+
+schemes:
+  TrainLive:
+    build:
+      targets:
+        TrainLive: all
+        TrainLiveWidget: all
+    run:
+      config: Debug
+    archive:
+      config: Release
