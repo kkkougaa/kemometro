@@ -36,7 +36,7 @@ targets:
     info:
       path: TrainLive/Info.plist
       properties:
-        CFBundleDisplayName: 열차 위치
+        CFBundleDisplayName: kemometro
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -62,7 +62,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive
         PRODUCT_NAME: TrainLive
-        INFOPLIST_KEY_CFBundleDisplayName: 열차 위치
+        INFOPLIST_KEY_CFBundleDisplayName: kemometro
         SWIFT_EMIT_LOC_STRINGS: "NO"
 
   TrainLiveWidget:
@@ -74,7 +74,7 @@ targets:
     info:
       path: TrainLiveWidget/Info.plist
       properties:
-        CFBundleDisplayName: 열차 위치
+        CFBundleDisplayName: kemometro
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

@@ -24,6 +24,8 @@ struct TrainActivityAttributes: ActivityAttributes {
         var stationName: String? = nil
         var lineId: String? = nil
         var directionLabel: String? = nil
+        /// 탑승 중 접힌 아일랜드의 달리기 프레임(갱신마다 0→3 반복)
+        var frame: Int = 0
     }
 
     /// 어느 설정(역)에서 띄웠는지. 버튼 인텐트가 이 id 로 돌아온다

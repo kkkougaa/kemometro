@@ -63,7 +63,7 @@ struct AppConfig: Codable {
     /// 띄워 둔 동안 다시 조회하는 간격(초)
     var refreshSeconds: Double = 5
     /// 탑승 추적 중 조회 간격(초)
-    var rideRefreshSeconds: Double = 15
+    var rideRefreshSeconds: Double = 5
     /// 탑승 추적 최대 시간(분)
     var rideMaxMinutes: Double = 90
 
@@ -88,7 +88,8 @@ struct AppConfig: Codable {
         trainsPerDirection = (try? c.decode(Int.self, forKey: .trainsPerDirection)) ?? 2
         cooldownSeconds = (try? c.decode(Double.self, forKey: .cooldownSeconds)) ?? 300
         refreshSeconds = (try? c.decode(Double.self, forKey: .refreshSeconds)) ?? 5
-        rideRefreshSeconds = (try? c.decode(Double.self, forKey: .rideRefreshSeconds)) ?? 15
+        rideRefreshSeconds = (try? c.decode(Double.self, forKey: .rideRefreshSeconds)) ?? 5
+        if rideRefreshSeconds == 15 { rideRefreshSeconds = 5 }
         rideMaxMinutes = (try? c.decode(Double.self, forKey: .rideMaxMinutes)) ?? 90
     }
 }

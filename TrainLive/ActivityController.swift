@@ -91,7 +91,7 @@ final class ActivityController: ObservableObject {
         }
         lastFired[pid] = Date()
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            note("라이브 액티비티가 꺼져 있습니다(설정 > 열차 위치)")
+            note("라이브 액티비티가 꺼져 있습니다(설정 > kemometro)")
             return
         }
 
@@ -323,6 +323,7 @@ final class ActivityController: ObservableObject {
                     departedKey = ""
                 }
                 state.ride = ride
+                state.frame = (state.frame + 1) % 4
                 state.message = nil
                 state.fetchedAt = Date()
                 lastState[pid] = state

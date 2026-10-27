@@ -294,8 +294,18 @@ enum ActivityIslandParts {
     }
 
     static func compactLeading(_ a: TrainActivityAttributes, _ s: ActivityState) -> some View {
-        LineMark(lineId: s.lineId ?? a.lineId, size: 22)
-            .padding(.leading, 2)
+        HStack(spacing: 5) {
+            LineMark(lineId: s.lineId ?? a.lineId, size: 22)
+            if s.riding, let ui = UIImage(named: "runner-\(((s.frame % 4) + 4) % 4)") {
+                Image(uiImage: ui)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 26, height: 22)
+                    .transition(.identity)
+            }
+        }
+        .padding(.leading, 2)
     }
 
     static func compactTrailing(_ a: TrainActivityAttributes, _ s: ActivityState) -> some View {

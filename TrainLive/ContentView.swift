@@ -93,7 +93,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("열차 위치")
+            .navigationTitle("kemometro")
             .toolbar { EditButton() }
             .navigationDestination(for: String.self) { key in
                 if key == "preview" { DesignPreviewView() }
