@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kemometro · 메인 화면 시안</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<style>
+  :root {
+    --ground: #f2f4f6; --text: #191f28; --sub: #4e5968; --dim: #8b95a1; --blue: #3182f6;
+    --ease: cubic-bezier(.2, .8, .2, 1); --spring: cubic-bezier(.3, 1.1, .4, 1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--text); font-family: "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", sans-serif; font-size: 15px; line-height: 1.5; letter-spacing: -.01em; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -.035em; margin: 0 0 6px; }
+  .lede { color: var(--sub); margin: 0 0 26px; font-size: 14.5px; }
+  .cols { display: grid; grid-template-columns: 380px 1fr; gap: 36px; align-items: start; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .tabs { display: flex; gap: 8px; margin: 0 0 18px; flex-wrap: wrap; }
+  .tabs button { border: 0; font-family: inherit; font-size: 13.5px; font-weight: 700; padding: 9px 15px; border-radius: 999px; background: #fff; color: var(--sub); cursor: pointer; box-shadow: 0 1px 3px rgba(25,31,40,.06); }
+  .tabs button.on { background: var(--blue); color: #fff; }
+  .notes { background: #fff; border-radius: 22px; padding: 22px 24px; box-shadow: 0 1px 3px rgba(25,31,40,.04), 0 8px 24px rgba(25,31,40,.06); }
+  .notes h2 { font-size: 16px; font-weight: 700; margin: 0 0 12px; letter-spacing: -.03em; }
+  .notes ol { margin: 0; padding-left: 20px; color: var(--sub); font-size: 13.5px; }
+  .notes li { margin: 0 0 8px; }
+  .notes b { color: var(--text); }
+
+  /* 폰 · 라이트/다크 */
+  .phone { --bg: #f2f4f6; --surface: #fff; --fg: #191f28; --fg2: #6b7684; --fg3: #adb5bd; --line: #e5e8eb; --soft: #f2f4f6; --shadow: 0 1px 2px rgba(25,31,40,.04), 0 6px 20px rgba(25,31,40,.06);
+    width: 360px; height: 740px; border-radius: 52px; background: var(--bg); box-shadow: 0 0 0 9px #1c1c1e, 0 0 0 10px #3a3a3c, 0 30px 60px rgba(0,0,0,.35); position: relative; overflow: hidden; color: var(--fg); transition: background .3s; }
+  .phone.dark { --bg: #000; --surface: #1c1c1e; --fg: #fff; --fg2: rgba(255,255,255,.6); --fg3: rgba(255,255,255,.3); --line: rgba(255,255,255,.12); --soft: #2c2c2e; --shadow: none; }
+  .phone .isl { position: absolute; left: 50%; top: 10px; width: 108px; height: 30px; border-radius: 20px; background: #000; transform: translateX(-50%); z-index: 20; }
+  .phone .sb { position: absolute; top: 14px; left: 30px; right: 30px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; z-index: 19; }
+  .screen { position: absolute; inset: 0; padding: 56px 0 28px; overflow-y: auto; scrollbar-width: none; opacity: 0; transform: translateY(14px); pointer-events: none; transition: opacity .35s var(--ease), transform .45s var(--spring); }
+  .screen::-webkit-scrollbar { display: none; }
+  .screen.on { opacity: 1; transform: none; pointer-events: auto; }
+  .pad { padding: 0 16px; }
+
+  /* 메인 */
+  .bar { display: flex; align-items: center; justify-content: space-between; margin: 2px 2px 16px; }
+  .loc { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px 0 11px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 13.5px; font-weight: 700; white-space: nowrap; }
+  .loc i { width: 8px; height: 8px; border-radius: 50%; background: #30d158; box-shadow: 0 0 0 3px rgba(48,209,88,.2); }
+  .loc small { color: var(--fg2); font-size: 12px; font-weight: 500; }
+  .glassbtn { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); box-shadow: var(--shadow); border: 0; color: var(--fg); cursor: pointer; }
+  .glassbtn svg { width: 19px; height: 19px; }
+  .where { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 18px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); margin-bottom: 22px; cursor: pointer; font-size: 16.5px; font-weight: 700; color: var(--fg2); letter-spacing: -.02em; }
+  .where svg { width: 20px; height: 20px; flex: none; color: var(--blue); }
+  .sechd { font-size: 22px; font-weight: 800; letter-spacing: -.045em; margin: 0 4px 12px; }
+  .lg { margin: 0 0 22px; }
+  .lh { display: flex; align-items: center; gap: 8px; margin: 0 4px 9px; font-size: 14px; font-weight: 700; color: var(--fg2); white-space: nowrap; }
+  .lh img { width: 22px; height: 22px; border-radius: 50%; }
+
+  /* 방면 카드: 방면마다 하나, 노선도 하나에 열차 여러 대 */
+  .dc { background: var(--surface); border-radius: 26px; padding: 16px 18px 16px; margin-bottom: 12px; box-shadow: var(--shadow); --lc: #D4003B; }
+  .dc .hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .dc .hd .dest { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .dc .hd .dest b { font-size: 19px; font-weight: 800; letter-spacing: -.04em; white-space: nowrap; }
+  .dc .hd .dest span { font-size: 11px; font-weight: 700; color: var(--lc); background: color-mix(in srgb, var(--lc) 13%, transparent); padding: 0 8px; height: 19px; line-height: 19px; border-radius: 999px; white-space: nowrap; }
+  .dc .hero { text-align: right; flex: none; }
+  .dc .hero b { display: block; font-size: 24px; font-weight: 800; letter-spacing: -.04em; line-height: 1.1; font-family: ui-rounded, "SF Pro Rounded", "Noto Sans KR", sans-serif; white-space: nowrap; transition: color .25s; }
+  .dc .hero b.acc { color: var(--lc); }
+  .dc .hero small { display: block; font-size: 11.5px; color: var(--fg2); font-weight: 500; margin-top: 1px; white-space: nowrap; }
+  .tk { position: relative; height: 82px; margin: 4px 0 2px; }
+  .tk .base { position: absolute; left: 12px; right: 12px; top: 48px; height: 5px; border-radius: 3px; background: var(--soft); }
+  .tk .fill { position: absolute; left: 12px; top: 48px; height: 5px; border-radius: 3px; background: linear-gradient(90deg, color-mix(in srgb, var(--lc) 15%, transparent), var(--lc)); transition: width .5s var(--spring); }
+  .tk .tick { position: absolute; top: 48.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--fg3); transform: translateX(-50%); }
+  .tk .end { position: absolute; top: 44px; width: 13px; height: 13px; border-radius: 50%; background: var(--fg); transform: translateX(-50%); }
+  .tk .endl { position: absolute; top: 62px; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: var(--fg2); white-space: nowrap; }
+  .tk .at { position: absolute; top: 66px; transform: translateX(-50%); font-size: 10.5px; font-weight: 500; color: var(--fg2); white-space: nowrap; transition: left .5s var(--spring); }
+  .tk .mk { position: absolute; top: 50.5px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--line), 0 2px 6px rgba(0,0,0,.12); cursor: pointer; opacity: .75; transition: all .35s var(--spring); }
+  .tk .mk svg { width: 15px; height: 15px; }
+  .tk .mk.sel { width: 32px; height: 32px; opacity: 1; box-shadow: 0 0 0 2.5px var(--lc), 0 4px 12px color-mix(in srgb, var(--lc) 38%, transparent); }
+  .tk .mk.sel svg { width: 20px; height: 20px; }
+  .tk .mk.gone { opacity: .45; width: 22px; height: 22px; }
+  .tk .mk.gone.sel { opacity: 1; width: 30px; height: 30px; }
+  .tk .chips { position: absolute; top: 8px; display: flex; gap: 3px; transform: translateX(-50%); transition: left .5s var(--spring); }
+  .tk .chips span { height: 16px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 800; color: #fff; display: grid; place-items: center; background: #E5483C; white-space: nowrap; }
+  .tk .chips span.last { background: #5E5CE6; }
+  .go { display: grid; place-items: center; height: 46px; border-radius: 16px; font-size: 16px; font-weight: 800; color: #fff; background: var(--lc); cursor: pointer; margin-top: 8px; letter-spacing: -.02em; box-shadow: 0 6px 16px color-mix(in srgb, var(--lc) 30%, transparent); transition: background .25s, box-shadow .25s, transform .2s var(--spring); }
+  .go:active { transform: scale(.98); }
+  .dc.tracking .go { background: var(--soft); color: var(--fg2); box-shadow: none; }
+
+  /* 경로 검색 (네이버 지도 대중교통 결과 모양) */
+  .rp { margin: 0 16px 12px; height: 54px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .rp .dot { width: 14px; height: 14px; border-radius: 50%; border: 4px solid #2ecc71; flex: none; }
+  .rp .dot.r { border-color: #f0524b; }
+  .rp .arr { color: var(--fg2); font-size: 14px; }
+  .rp .x { margin-left: auto; font-size: 24px; line-height: 1; color: var(--fg2); font-weight: 300; }
+  .flt { display: flex; justify-content: space-between; padding: 12px 18px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .flt .b { color: #0a6cff; font-weight: 700; }
+  .flt .b b { font-weight: 800; }
+  .flt svg { width: 10px; height: 10px; margin-left: 4px; vertical-align: 1px; }
+  .nr { padding: 16px 18px 16px; background: var(--surface); margin-bottom: 8px; }
+  .nr .tag { color: #0a6cff; font-weight: 700; font-size: 13.5px; margin-bottom: 2px; }
+  .nr .big { font-size: 15px; font-weight: 500; line-height: 1.15; letter-spacing: -.04em; white-space: nowrap; }
+  .nr .big b { font-size: 36px; font-weight: 800; letter-spacing: -.05em; }
+  .nr .meta { font-size: 14.5px; color: var(--fg); margin: 8px 0 14px; white-space: nowrap; }
+  .nr .meta i { display: inline-block; width: 1px; height: 11px; background: var(--line); margin: 0 7px; vertical-align: -1px; }
+  /* 구간 막대: 구간이 바뀌는 선이 다음 노선 아이콘 정중앙에 와서 이음매가 보이지 않는다 */
+  .pb { display: flex; height: 26px; margin: 0 0 16px 13px; }
+  .pb .sg { position: relative; height: 26px; display: flex; align-items: center; padding-left: 20px; color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; letter-spacing: -.02em; }
+  .pb .sg:last-child { border-radius: 0 13px 13px 0; }
+  .pb .sg img { position: absolute; left: -13px; top: 0; width: 26px; height: 26px; border-radius: 50%; }
+  .lr { display: flex; gap: 12px; padding: 8px 0; font-size: 16px; line-height: 1.35; }
+  .lr .ln { flex: none; width: 112px; display: flex; align-items: flex-start; gap: 6px; font-weight: 700; padding-top: 1px; white-space: nowrap; }
+  .lr .ln img { width: 20px; height: 20px; border-radius: 50%; flex: none; margin-top: 2px; }
+  .lr .ln .t { display: flex; flex-direction: column; min-width: 0; }
+  .lr .ln .t .row { display: flex; align-items: center; gap: 5px; }
+  .lr .ln small { font-size: 11px; font-weight: 600; color: var(--fg2); line-height: 1.25; }
+  .lr .ln .ex { font-size: 10px; font-weight: 800; color: #fff; background: #E5483C; border-radius: 999px; padding: 0 6px; height: 16px; line-height: 16px; }
+  .lr .st { flex: 1; min-width: 0; }
+  .lr .st .nm { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 400; white-space: nowrap; }
+  .lr .st .nm > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+  .lr .st .nm .tg span { font-size: 12.5px; font-weight: 500; padding: 3px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+  .lr .arr { margin-top: 6px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+  .lr .arr div { display: flex; align-items: center; gap: 6px; padding: 3px 6px; margin: 0 -6px; cursor: pointer; border-radius: 8px; white-space: nowrap; overflow: hidden; }
+  .lr .arr div b { font-weight: 600; }
+  .lr .arr div em { font-style: normal; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; }
+  .lr .arr div i { display: inline-block; width: 1px; height: 10px; background: var(--line); flex: none; }
+  .lr .arr div.on { background: color-mix(in srgb, var(--c) 10%, transparent); }
+  .lr .arr div.on::after { content: "탑승"; margin-left: auto; font-size: 11px; font-weight: 800; color: var(--c); flex: none; }
+  .lr.end .ln { color: var(--fg2); font-weight: 600; }
+  .lr.end .ln .o { width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid var(--fg2); margin: 4px 4px 0 3px; flex: none; }
+  .lr.end .bell { font-size: 12.5px; font-weight: 600; padding: 3px 11px; border-radius: 999px; background: color-mix(in srgb, #0a6cff 10%, transparent); color: #0a6cff; cursor: pointer; white-space: nowrap; }
+  .lr.end .bell.off { background: var(--soft); color: var(--fg2); }
+  .start { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; height: 46px; border-radius: 12px; border: 1px solid var(--line); font-size: 16px; font-weight: 600; color: #0a6cff; cursor: pointer; background: var(--surface); transition: background .25s, color .25s; white-space: nowrap; }
+  .start svg { width: 18px; height: 18px; }
+  .start.on { background: #0a6cff; border-color: #0a6cff; color: #fff; }
+
+  .toast { position: absolute; left: 20px; right: 20px; bottom: 26px; padding: 13px 16px; border-radius: 18px; background: rgba(60,60,64,.94); color: #fff; backdrop-filter: blur(20px); font-size: 13.5px; font-weight: 600; opacity: 0; transform: translateY(10px); transition: opacity .3s, transform .4s var(--spring); z-index: 30; pointer-events: none; }
+  .toast.on { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>kemometro · 메인 화면</h1>
+  <p class="lede">앱을 열면 설정 대신 지금 내 위치 기준 화면이 먼저 나와요. 방면마다 카드 하나, 노선도 하나에 열차가 여러 대 올라가요.</p>
+  <div class="cols">
+    <div>
+      <div class="tabs" id="tabs">
+        <button data-go="home" class="on">메인</button>
+        <button data-go="search">경로 검색</button>
+        <button id="theme">다크로 보기</button>
+      </div>
+      <div class="phone" id="phone">
+        <div class="isl"></div>
+        <div class="sb"><span>5:12</span><span>5G ▮</span></div>
+
+        <section class="screen on" id="s-home">
+          <div class="pad">
+            <div class="bar">
+              <span class="loc"><i></i>판교역 <small>120m</small></span>
+              <button class="glassbtn" aria-label="설정"><svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M11.08 2.5a1 1 0 0 1 .98-.8h1.88a1 1 0 0 1 .98.8l.3 1.55c.5.2.97.47 1.4.8l1.5-.5a1 1 0 0 1 1.17.46l.94 1.63a1 1 0 0 1-.2 1.25l-1.2 1.04c.07.52.07 1.04 0 1.56l1.2 1.04a1 1 0 0 1 .2 1.25l-.94 1.63a1 1 0 0 1-1.17.46l-1.5-.5c-.43.33-.9.6-1.4.8l-.3 1.55a1 1 0 0 1-.98.8h-1.88a1 1 0 0 1-.98-.8l-.3-1.55a6.3 6.3 0 0 1-1.4-.8l-1.5.5a1 1 0 0 1-1.17-.46l-.94-1.63a1 1 0 0 1 .2-1.25l1.2-1.04a6.4 6.4 0 0 1 0-1.56l-1.2-1.04a1 1 0 0 1-.2-1.25l.94-1.63a1 1 0 0 1 1.17-.46l1.5.5c.43-.33.9-.6 1.4-.8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></button>
+            </div>
+            <div class="where" data-go="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>어디까지 가시나요?</div>
+            <div class="sechd">지금 판교역</div>
+            <div id="lines"></div>
+          </div>
+        </section>
+
+        <section class="screen" id="s-search" style="padding-top:52px">
+          <div class="rp"><span class="dot"></span>판교역<span class="arr">→</span><span class="dot r"></span>합정역<span class="x">×</span></div>
+          <div class="flt"><span class="b">지금 <b>17:12</b> 출발 <svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><span>최적 경로순 <svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>
+          <div id="routes" style="margin-top:8px"></div>
+        </section>
+
+        <div class="toast" id="toast"></div>
+      </div>
+    </div>
+    <div class="notes">
+      <h2>이렇게 동작해요</h2>
+      <ol>
+        <li><b>메인</b> — 위치 권한으로 가장 가까운 역을 찾고, 그 역을 지나는 노선마다 방면별 카드를 하나씩 보여줘요.</li>
+        <li><b>열차 고르기</b> — 카드 안 노선도에 열차가 여러 대 올라가 있어요. 열차 아이콘을 누르면 선택돼서 위 상태와 칩이 그 열차 기준으로 바뀌고, 아래 추적 버튼 하나로 시작해요.</li>
+        <li><b>막 떠난 열차</b>는 노선도 오른쪽 끝에 흐리게 남아요. 탔는데 이미 떠났을 때 그 열차를 골라 추적할 수 있어요.</li>
+        <li><b>어디까지 가시나요?</b> — 도착역을 넣으면 경로 API로 최소 시간·최소 환승·최단 거리 경로를 가져와요. 요금과 시간표 시각도 같이 나와요.</li>
+        <li><b>경로 카드</b> — 구간 막대는 노선 아이콘이 구간 경계에 걸쳐 있어서 이음매가 보이지 않아요. 첫 구간은 지금 들어오는 열차가 같이 나오고, 누르면 탑승 열차로 골라져요.</li>
+        <li><b>하차 알림</b>은 목적지를 정했을 때만 켜져요. 2정거장 전, 다음 역, 도착에 알려줘요.</li>
+        <li><b>2호선</b>은 내선(시계)·외선(반시계), 9호선 급행은 노선 이름 옆에 급행 칩이 붙어요.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var IC = {{ICONS}};
+  var COL = { '1077': '#D4003B', '1081': '#003DA5', '1002': '#00A84D', '1009': '#BDB092', '1032': '#9A6292', '1063': '#77C4A3' };
+  var NAME = { '1077': '신분당선', '1081': '경강선', '1002': '2호선', '1009': '9호선', '1032': 'GTX-A', '1063': '경의중앙선' };
+  function $(id) { return document.getElementById(id); }
+  function tram(c) {
+    return '<svg viewBox="0 0 24 24"><path d="M9.2 3.4h5.6" stroke="' + c + '" stroke-width="1.6" stroke-linecap="round"/><rect x="5.4" y="4.8" width="13.2" height="12" rx="3.6" fill="' + c + '"/><rect x="7.6" y="7" width="8.8" height="4.4" rx="1.4" fill="#fff"/><circle cx="9.1" cy="14" r="1" fill="#fff"/><circle cx="14.9" cy="14" r="1" fill="#fff"/><path d="M8.6 17.2 7 20.4M15.4 17.2 17 20.4" stroke="' + c + '" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+
+  /* ── 메인: 판교역 · 노선 → 방면(카드 하나) → 열차 여러 대 ── */
+  var SLOTS = 4;
+  var HOME = [
+    { line: '1077', dirs: [
+      { dest: '신사행', trains: [ { st: '전역', at: '정자', n: 1, tags: [] }, { st: '4역 전', at: '동천', n: 4, tags: [] }, { gone: true } ] },
+      { dest: '광교행', trains: [ { st: '진입', at: '', n: .15, acc: true, tags: ['막차'] }, { st: '3역 전', at: '청계산입구', n: 3, tags: [] }, { gone: true } ] }
+    ] },
+    { line: '1081', dirs: [
+      { dest: '여주행', trains: [ { st: '2역 전', at: '성남', n: 2, tags: [] } ] }
+    ] }
+  ];
+  var W = 292, PAD = 12, INNER = W - PAD * 2 - 26;   // 오른쪽에 막 떠난 열차 자리
+  function xOf(n) { return PAD + INNER * (1 - Math.min(n, SLOTS + .6) / SLOTS); }
+  function endX() { return PAD + INNER; }
+
+  function dirCard(line, d, key) {
+    var c = COL[line];
+    var ticks = ''; for (var i = 1; i <= SLOTS; i++) ticks += '<i class="tick" style="left:' + xOf(i) + 'px"></i>';
+    var mks = d.trains.map(function (t, i) {
+      var x = t.gone ? endX() + 21 : xOf(t.n);
+      return '<div class="mk' + (t.gone ? ' gone' : '') + (i === 0 ? ' sel' : '') + '" data-i="' + i + '" style="left:' + x + 'px">' + tram(c) + '</div>';
+    }).join('');
+    return '<div class="dc" data-key="' + key + '" style="--lc:' + c + '">' +
+      '<div class="hd"><div class="dest"><b>' + d.dest + '</b></div><div class="hero"><b></b><small></small></div></div>' +
+      '<div class="tk"><div class="base"></div><div class="fill"></div>' + ticks + '<div class="end" style="left:' + endX() + 'px"></div><div class="endl" style="left:' + endX() + 'px">판교</div>' +
+      '<div class="chips"></div><div class="at"></div>' + mks + '</div>' +
+      '<div class="go">추적</div></div>';
+  }
+  function select(card, d, idx) {
+    var t = d.trains[idx], c = card.querySelector('.hero b');
+    Array.prototype.forEach.call(card.querySelectorAll('.mk'), function (m, i) { m.classList.toggle('sel', i === idx); });
+    c.textContent = t.gone ? '출발' : t.st; c.classList.toggle('acc', !!t.acc);
+    card.querySelector('.hero small').textContent = t.gone ? '방금 출발' : (t.acc ? '곧 도착' : (t.at ? '지금 ' + t.at : ''));
+    var x = t.gone ? endX() + 21 : xOf(t.n);
+    var chips = card.querySelector('.chips');
+    chips.innerHTML = (t.tags || []).map(function (g) { return '<span class="' + (g === '막차' ? 'last' : '') + '">' + g + '</span>'; }).join('');
+    chips.style.left = Math.min(Math.max(x, 36), W - 36) + 'px';
+    var at = card.querySelector('.at');
+    at.textContent = (!t.gone && t.at && t.n > 1.1) ? t.at : ''; at.style.left = x + 'px';
+    card.querySelector('.fill').style.width = Math.max(0, (t.gone ? INNER : INNER * (1 - Math.min(t.n, SLOTS + .6) / SLOTS))) + 'px';
+    card.setAttribute('data-sel', idx);
+  }
+  function renderHome() {
+    var h = '';
+    HOME.forEach(function (g) {
+      h += '<div class="lg"><div class="lh"><img src="' + IC[g.line] + '" alt="">' + NAME[g.line] + '</div>';
+      g.dirs.forEach(function (d, di) { h += dirCard(g.line, d, g.line + '-' + di); });
+      h += '</div>';
+    });
+    $('lines').innerHTML = h;
+    Array.prototype.forEach.call(document.querySelectorAll('#lines .dc'), function (card) {
+      var parts = card.getAttribute('data-key').split('-'), g = HOME.filter(function (x) { return x.line === parts[0]; })[0], d = g.dirs[+parts[1]];
+      select(card, d, 0);
+      Array.prototype.forEach.call(card.querySelectorAll('.mk'), function (m) { m.onclick = function () { select(card, d, +this.getAttribute('data-i')); }; });
+      card.querySelector('.go').onclick = function () {
+        var on = card.classList.contains('tracking');
+        Array.prototype.forEach.call(document.querySelectorAll('#lines .dc'), function (x) { x.classList.remove('tracking'); x.querySelector('.go').textContent = '추적'; });
+        if (!on) { card.classList.add('tracking'); this.textContent = '추적 중'; toast('라이브 액티비티로 추적을 시작했어요'); }
+      };
+    });
+  }
+
+  /* ── 경로 검색: 판교 → 합정. 경로 API(getShtrmPath) 샘플 응답을 그대로 옮김 ── */
+  function clock(sec) { var h = Math.floor(sec / 3600) % 24, m = Math.floor(sec % 3600 / 60); return (h >= 12 ? '오후 ' : '오전 ') + (h > 12 ? h - 12 : h) + ':' + (m < 10 ? '0' : '') + m; }
+  var ROUTES = [
+    { min: 52, tr: 2, fare: 3650, end: 18 * 3600 + 10 * 60, legs: [
+        { l: '1077', m: 15, from: '판교역', arr: [ { m: 7, dest: '신사행', via: '청계산입구 방면' }, { m: 13, dest: '신사행', via: '청계산입구 방면' } ] },
+        { l: '1009', m: 18, from: '신논현역', ex: true },
+        { l: '1002', m: 3, from: '당산역', loop: '내선 · 시계' } ] },
+    { min: 56, tr: 1, fare: 2950, end: 18 * 3600 + 10 * 60, best: true, legs: [
+        { l: '1077', m: 14, from: '판교역', arr: [ { m: 7, dest: '신사행', via: '청계산입구 방면' }, { m: 13, dest: '신사행', via: '청계산입구 방면' } ] },
+        { l: '1002', m: 37, from: '강남역', loop: '내선 · 시계' } ] }
+  ];
+  function won(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; }
+  function renderRoutes() {
+    $('routes').innerHTML = ROUTES.map(function (r, ri) {
+      var total = r.legs.reduce(function (s, g) { return s + g.m; }, 0);
+      var pb = r.legs.map(function (g, gi) {
+        var w = Math.max(g.m / total, 0.14);
+        return '<div class="sg" style="flex:' + w + ';background:' + COL[g.l] + ';min-width:' + (gi === 0 ? 50 : 56) + 'px"><img src="' + IC[g.l] + '" alt="">' + g.m + '분</div>';
+      }).join('');
+      var rows = r.legs.map(function (g) {
+        var nm = '<div class="ln" style="color:' + COL[g.l] + '"><img src="' + IC[g.l] + '" alt=""><span class="t"><span class="row">' + NAME[g.l] + (g.ex ? '<span class="ex">급행</span>' : '') + '</span>' + (g.loop ? '<small>' + g.loop + '</small>' : '') + '</span></div>';
+        var arr = '';
+        if (g.arr) arr = '<div class="arr">' + g.arr.map(function (a, ai) { return '<div data-r="' + ri + '" data-a="' + ai + '" style="--c:' + COL[g.l] + '"><b style="color:' + COL[g.l] + '">' + a.m + '분</b><span>' + a.dest + '</span><i></i><em>' + a.via + '</em></div>'; }).join('') + '</div>';
+        return '<div class="lr">' + nm + '<div class="st"><div class="nm"><span>' + g.from + '</span>' + (g.arr ? '<span class="tg"><span>실시간</span></span>' : '') + '</div>' + arr + '</div></div>';
+      }).join('');
+      var end = '<div class="lr end"><div class="ln"><span class="o"></span>하차</div><div class="st"><div class="nm"><span style="color:var(--fg)">합정역</span><span class="bell" data-bell>알림 켬</span></div></div></div>';
+      return '<div class="nr" data-i="' + ri + '">' + (r.best ? '<div class="tag">최소환승</div>' : '') +
+        '<div class="big"><b>' + r.min + '</b>분</div>' +
+        '<div class="meta">' + clock(17 * 3600 + 12 * 60) + ' - ' + clock(r.end) + '<i></i>' + won(r.fare) + '<i></i>환승 ' + r.tr + '회</div>' +
+        '<div class="pb">' + pb + '</div>' + rows + end +
+        '<div class="start" data-start>' + tram('currentColor') + '<span>바로 추적 시작</span></div></div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('#routes .arr div'), function (d) {
+      d.onclick = function () {
+        Array.prototype.forEach.call(this.parentNode.children, function (x) { x.classList.remove('on'); });
+        this.classList.add('on');
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#routes [data-bell]'), function (b) {
+      b.onclick = function () { var off = this.classList.toggle('off'); this.textContent = off ? '알림 끔' : '알림 켬'; };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#routes [data-start]'), function (b) {
+      b.onclick = function () {
+        var card = this.closest('.nr');
+        Array.prototype.forEach.call(document.querySelectorAll('#routes [data-start]'), function (x) { x.classList.remove('on'); x.querySelector('span').textContent = '바로 추적 시작'; });
+        this.classList.add('on'); this.querySelector('span').textContent = '추적 중';
+        toast('라이브 액티비티로 추적을 시작했어요' + (card.querySelector('[data-bell]').classList.contains('off') ? '' : ' · 합정 하차 알림 켜짐'));
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#routes .nr'), function (c) { var f = c.querySelector('.arr div'); if (f) f.classList.add('on'); });
+  }
+
+  var timer = null;
+  function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(timer); timer = setTimeout(function () { t.classList.remove('on'); }, 2400); }
+  function go(name) {
+    ['home', 'search'].forEach(function (k) { $('s-' + k).classList.toggle('on', k === name); });
+    Array.prototype.forEach.call(document.querySelectorAll('#tabs [data-go]'), function (b) { b.classList.toggle('on', b.getAttribute('data-go') === name); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function (b) { b.addEventListener('click', function () { go(b.getAttribute('data-go')); }); });
+  $('theme').onclick = function () { var d = $('phone').classList.toggle('dark'); this.textContent = d ? '라이트로 보기' : '다크로 보기'; };
+  renderHome(); renderRoutes();
+})();
+</script>
+</body>
+</html>

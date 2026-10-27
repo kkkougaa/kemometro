@@ -95,13 +95,15 @@ enum SubwayAPI {
         throw SubwayAPIError.server(code.isEmpty ? msg : "\(code) \(msg)")
     }
 
-    /// "서울역" 처럼 '역'을 떼야 응답이 오는 경우를 한 번 더 시도
+    /// 명세서의 조회 이름 규칙(응암 → 응암순환(상선) 등)과 "서울역" 의 '역' 떼기를 차례로 시도
     static func arrivalsSmart(station: String, apiKey: String) async throws -> [ArrivalRow] {
-        let list = try await arrivals(station: station, apiKey: apiKey)
-        if list.isEmpty, station.hasSuffix("역") {
-            return try await arrivals(station: String(station.dropLast()), apiKey: apiKey)
+        var last: [ArrivalRow] = []
+        for name in StationNames.queryCandidates(station) {
+            let list = try await arrivals(station: name, apiKey: apiKey)
+            if !list.isEmpty { return list }
+            last = list
         }
-        return list
+        return last
     }
 }
 

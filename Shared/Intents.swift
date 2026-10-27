@@ -9,6 +9,8 @@ enum RideIntentHandler {
     static var chooseLine: ((String, String) async -> Void)?
     static var chooseDirection: ((String, String, String, String) async -> Void)?
     static var dismiss: ((String) async -> Void)?
+    static var select: ((String, String) async -> Void)?
+    static var shift: ((String, Int) async -> Void)?
 }
 
 /// "탑승": 이 열차를 추적 모드로
@@ -95,6 +97,40 @@ struct DismissIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         await RideIntentHandler.dismiss?(placeId)
+        return .result()
+    }
+}
+
+/// 노선도의 열차 마커를 눌러 탑승할 열차를 고른다
+struct SelectTrainIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "열차 선택"
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "역 설정 ID") var placeId: String
+    @Parameter(title: "열차 번호") var trainId: String
+
+    init() { placeId = ""; trainId = "" }
+    init(placeId: String, trainId: String) { self.placeId = placeId; self.trainId = trainId }
+
+    func perform() async throws -> some IntentResult {
+        await RideIntentHandler.select?(placeId, trainId)
+        return .result()
+    }
+}
+
+/// 탑승 중 추적할 열차를 앞 열차(+1) 또는 뒤 열차(-1)로 바꾼다
+struct ShiftTrainIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "열차 변경"
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "역 설정 ID") var placeId: String
+    @Parameter(title: "방향") var delta: Int
+
+    init() { placeId = ""; delta = 1 }
+    init(placeId: String, delta: Int) { self.placeId = placeId; self.delta = delta }
+
+    func perform() async throws -> some IntentResult {
+        await RideIntentHandler.shift?(placeId, delta)
         return .result()
     }
 }

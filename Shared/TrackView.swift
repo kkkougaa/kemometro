@@ -1,9 +1,11 @@
+import AppIntents
 import SwiftUI
 
 /// 전동차 마커: 흰 원 안에 노선색 전동차(SF Symbol tram.fill). 노선 로고를 쓰지 않고 선 위에 얹는다.
 struct TrainMarker: View {
     let color: Color
     var size: CGFloat = 26
+    var ring: Color = Color.black.opacity(0.9)
 
     var body: some View {
         ZStack {
@@ -13,9 +15,47 @@ struct TrainMarker: View {
                 .foregroundStyle(color)
         }
         .frame(width: size, height: size)
-        .overlay(Circle().strokeBorder(Color.black.opacity(0.9), lineWidth: 2).padding(-2))
+        .overlay(Circle().strokeBorder(ring, lineWidth: 2).padding(-2))
         .shadow(color: .black.opacity(0.4), radius: 3, y: 1.5)
     }
+}
+
+/// 열차종류·막차 칩. 마커 위에 얹는다.
+struct TrainTagChip: View {
+    let text: String
+
+    private var fill: Color {
+        switch text {
+        case "막차": return Color(hex: "#5E5CE6")
+        case "ITX": return Color(hex: "#0A84FF")
+        default: return Color(hex: "#E5483C")
+        }
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 9.5, weight: .heavy))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .frame(height: 14)
+            .background(fill, in: Capsule())
+            .fixedSize()
+    }
+}
+
+struct TagChips: View {
+    let tags: [String]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(tags, id: \.self) { TrainTagChip(text: $0) }
+        }
+    }
+
+    /// 칩 묶음의 대략적인 너비(가장자리에서 잘리지 않게 위치를 조정할 때 쓴다)
+    static func width(_ tags: [String]) -> CGFloat { CGFloat(tags.count) * 29 + CGFloat(max(0, tags.count - 1)) * 3 }
+    /// 칩이 있을 때 진행선 위쪽에 더 두는 높이
+    static func room(_ tags: [String]) -> CGFloat { tags.isEmpty ? 0 : 15 }
 }
 
 /// 접근 진행선: 오른쪽 끝이 이 역, 왼쪽으로 한 칸이 한 역 전. 지나온 구간은 노선색 그라데이션.
@@ -28,16 +68,25 @@ struct RouteProgressView: View {
     var markerSize: CGFloat = 26
     var pulse: Bool = false
     var reveal: Bool = true
+    var tags: [String] = []
+    /// 고른 열차. 열차 마커를 누르면 SelectTrainIntent 로 바뀐다
+    var selectedId: String? = nil
+    var placeId: String = ""
 
     private var color: Color { Lines.info(lineId).color }
-    private var positions: [Double] { trains.map { $0.n ?? Double(slots) + 1.3 } }
+    private var live: [TrainInfo] { trains.filter { !$0.departed } }
+    private var gone: TrainInfo? { trains.first { $0.departed } }
+    private var positions: [Double] { live.map { $0.n ?? Double(slots) + 1.3 } }
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let pad = markerSize / 2 + 2
-            let inner = w - pad * 2
-            let y = geo.size.height * 0.4
+            // 막 떠난 열차가 있으면 오른쪽에 자리를 비운다
+            let extra: CGFloat = gone == nil ? 0 : markerSize * 0.9
+            let inner = w - pad * 2 - extra
+            let top = TagChips.room(tags)
+            let y = top + (geo.size.height - top) * 0.4
             let lead = min(positions.first ?? Double(slots) + 0.6, Double(slots) + 0.6)
             let fillW = max(0, inner * CGFloat(1 - lead / Double(slots)))
 
@@ -57,24 +106,56 @@ struct RouteProgressView: View {
                 Circle().fill(Color.primary)
                     .frame(width: 12, height: 12)
                     .scaleEffect(pulse ? 1.25 : 1)
-                    .position(x: w - pad, y: y)
+                    .position(x: pad + inner, y: y)
                 Text(stationName)
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .fixedSize()
-                    .position(x: w - pad, y: y + 17)
-                ForEach(Array(trains.prefix(2).enumerated()), id: \.element.id) { idx, t in
+                    .position(x: pad + inner, y: y + 17)
+                ForEach(Array(live.prefix(2).enumerated()), id: \.element.id) { idx, t in
                     let n = t.n ?? Double(slots) + 1.3
-                    TrainMarker(color: color, size: idx == 0 ? markerSize : markerSize * 0.7)
-                        .opacity(n > Double(slots) + 0.5 ? 0 : (idx == 0 ? 1 : 0.8))
-                        .position(x: xOf(n, w: w, pad: pad, inner: inner), y: y)
-                    if idx == 0, !t.at.isEmpty, n > 1.1 {
+                    let x = xOf(n, w: w, pad: pad, inner: inner)
+                    let chosen = t.id == (selectedId ?? live.first?.id)
+                    let hidden = n > Double(slots) + 0.5
+                    Button(intent: SelectTrainIntent(placeId: placeId, trainId: t.id)) {
+                        TrainMarker(color: color, size: chosen ? markerSize : markerSize * 0.7)
+                            .frame(width: markerSize + 8, height: markerSize + 8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(hidden ? 0 : (chosen ? 1 : 0.8))
+                    .allowsHitTesting(!hidden)
+                    .position(x: x, y: y)
+                    if chosen, !tags.isEmpty {
+                        let half = TagChips.width(tags) / 2
+                        TagChips(tags: tags)
+                            .opacity(hidden ? 0 : 1)
+                            .position(x: min(max(x, half), w - half), y: y - markerSize / 2 - 11)
+                    }
+                    if chosen, !t.at.isEmpty, n > 1.1 {
                         Text(t.at)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                             .fixedSize()
-                            .position(x: xOf(n, w: w, pad: pad, inner: inner), y: y + 19)
-                            .opacity(n > Double(slots) + 0.5 ? 0 : 1)
+                            .position(x: x, y: y + 19)
+                            .opacity(hidden ? 0 : 1)
+                    }
+                }
+                if let g = gone {
+                    let gx = pad + inner + extra * 0.72
+                    let chosenGone = selectedId == g.id
+                    Button(intent: SelectTrainIntent(placeId: placeId, trainId: g.id)) {
+                        TrainMarker(color: color, size: chosenGone ? markerSize : markerSize * 0.7)
+                            .frame(width: markerSize + 8, height: markerSize + 8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(chosenGone ? 1 : 0.55)
+                    .position(x: gx, y: y)
+                    if chosenGone, !tags.isEmpty {
+                        let half = TagChips.width(tags) / 2
+                        TagChips(tags: tags)
+                            .position(x: min(max(gx, half), w - half), y: y - markerSize / 2 - 11)
                     }
                 }
             }
@@ -99,6 +180,7 @@ struct RideProgressView: View {
     let ride: RideInfo
     let lineId: String
     var markerSize: CGFloat = 26
+    var tags: [String] = []
 
     private var color: Color { Lines.info(lineId).color }
     /// 역 사이(출발 상태)면 반 칸 앞으로
@@ -112,7 +194,8 @@ struct RideProgressView: View {
             let w = geo.size.width
             let pad: CGFloat = 14
             let step = (w - pad * 2) / 3
-            let y = geo.size.height * 0.4
+            let top = TagChips.room(tags)
+            let y = top + (geo.size.height - top) * 0.4
             let trainX = pad + step
             let lo = max(0, Int(position.rounded(.down)) - 2)
             let hi = min(ride.path.count - 1, Int(position.rounded(.up)) + 3)
@@ -148,6 +231,10 @@ struct RideProgressView: View {
                 }
                 TrainMarker(color: color, size: markerSize)
                     .position(x: trainX, y: y)
+                if !tags.isEmpty {
+                    TagChips(tags: tags)
+                        .position(x: trainX, y: y - markerSize / 2 - 11)
+                }
             }
             .mask(
                 LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.17),

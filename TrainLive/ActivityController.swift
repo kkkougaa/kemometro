@@ -21,6 +21,14 @@ final class ActivityController: ObservableObject {
     private var transient: [String: Place] = [:]
     /// 환승 선택 중 역의 도착 응답(방면 후보 계산용)
     private var transferRows: [String: (station: String, rows: [ArrivalRow])] = [:]
+    /// 하차 알림을 받을 역(메인 화면에서 목적지를 정했을 때만 있다)
+    private var rideTargets: [String: String] = [:]
+    /// 접근 모드에서 사용자가 노선도에서 고른 열차
+    private var selected: [String: String] = [:]
+    /// 탑승 추적 중인 열차 번호와, 같은 방향 열차의 진행 순서(앞·뒤 열차 변경용)
+    private var rideNo: [String: String] = [:]
+    private var rideCands: [String: [(no: String, key: Double)]] = [:]
+    private var refreshNow = Set<String>()
     private var demoFetchCount = 0
     private var demoRideStep = 0
 
@@ -134,7 +142,7 @@ final class ActivityController: ObservableObject {
         await activity.update(content(state, stale: endsAt.addingTimeInterval(60)))
 
         // 3) refreshSeconds 마다 갱신
-        let interval = max(3, cfg.refreshSeconds)
+        let interval = max(1, cfg.refreshSeconds)
         while Date() < endsAt {
             let remain = endsAt.timeIntervalSinceNow
             try? await Task.sleep(nanoseconds: UInt64(max(0.5, min(interval, remain)) * 1_000_000_000))
@@ -149,6 +157,8 @@ final class ActivityController: ObservableObject {
             let (_, trains, err) = await fetchApproach(place: place, cfg: cfg)
             if err == nil {
                 state = State(trains: trains, fetchedAt: Date(), phase: 1, message: nil, endsAt: endsAt)
+                // 고른 열차가 아직 보이면 유지, 지나갔으면 가장 가까운 열차로
+                if let id = selected[pid], trains.contains(where: { $0.id == id }) { state.selectedId = id } else { selected[pid] = nil }
                 lastState[pid] = state
                 await activity.update(content(state, stale: endsAt.addingTimeInterval(60)))
             }
@@ -190,8 +200,54 @@ final class ActivityController: ObservableObject {
         }
     }
 
+    /// 탑승 중 추적 열차를 앞(+1)·뒤(-1) 열차로 바꾼다
+    func shiftTrain(placeId: String, delta: Int) async {
+        guard let list = rideCands[placeId], let cur = rideNo[placeId],
+              let i = list.firstIndex(where: { SubwayAPI.sameTrain($0.no, cur) }) else { note("열차 변경: 후보 없음"); return }
+        let j = i + (delta > 0 ? 1 : -1)
+        guard list.indices.contains(j) else { note("열차 변경: 그쪽에 열차 없음"); return }
+        rideNo[placeId] = list[j].no
+        refreshNow.insert(placeId)
+        note("열차 변경 \(list[i].no) → \(list[j].no)")
+    }
+
+    /// 노선도의 열차 마커를 눌렀을 때: 그 열차를 탑승 대상으로 표시한다. 같은 열차를 다시 누르면 해제.
+    func select(placeId: String, trainId: String) async {
+        guard let activity = running[placeId], var state = lastState[placeId], state.mode == 0,
+              state.trains.contains(where: { $0.id == trainId }) else { return }
+        let next: String? = (state.selected?.id == trainId && selected[placeId] != nil) ? nil : trainId
+        selected[placeId] = next
+        state.selectedId = next
+        lastState[placeId] = state
+        await activity.update(content(state, stale: state.endsAt.addingTimeInterval(60)))
+        note("열차 선택 \(trainId)")
+    }
+
+    /// 메인 화면에서 열차를 골라 추적을 시작한다. target 이 있으면 그 역 2정거장 전·다음 역·도착에 알림을 준다.
+    func startTracking(place: Place, trainNo: String, target: String?) async {
+        let pid = place.id.uuidString
+        transient[pid] = place
+        rideTargets[pid] = target
+        await board(placeId: pid, trainNo: trainNo)
+    }
+
+    /// 하차 알림 문구. 단계 2: 두 정거장 전, 1: 다음 역, 0: 도착
+    private func alertConfig(_ stage: Int, target: String) -> AlertConfiguration {
+        let body: String
+        switch stage {
+        case 2: body = "\(target)까지 두 정거장 남았어요"
+        case 1: body = "다음 역 \(target)에서 내려요"
+        default: body = "\(target)에 도착했어요"
+        }
+        return AlertConfiguration(title: "하차 알림", body: LocalizedStringResource(stringLiteral: body), sound: .default)
+    }
+
     /// "하차" 버튼: 추적을 멈추고, 그 역에 다른 노선이 있으면 환승을 묻는다
     func endRide(placeId: String) async {
+        rideNo[placeId] = nil
+        rideCands[placeId] = nil
+        rideTargets[placeId] = nil
+        selected[placeId] = nil
         rideTasks[placeId]?.cancel()
         rideTasks[placeId] = nil
         guard let place = place(for: placeId), let activity = running[placeId] else { note("하차"); return }
@@ -241,7 +297,12 @@ final class ActivityController: ObservableObject {
             if seen.contains(k) { continue }
             seen.append(k)
             let d = TrainStatus.dest(of: r.trainLineNm)
-            options.append(ChoiceOption(id: k, title: d.full.isEmpty ? k : d.full, lineId: lineId, dest: d.name, updn: k))
+            if lineId == "1002", let t = Lines.loopText(k) {
+                // 2호선 순환: 성수행/성수행 대신 내선(시계), 외선(반시계)
+                options.append(ChoiceOption(id: k, title: t, lineId: lineId, dest: "", updn: k))
+            } else {
+                options.append(ChoiceOption(id: k, title: d.full.isEmpty ? k : d.full, lineId: lineId, dest: d.name, updn: k))
+            }
         }
         if options.isEmpty {
             if LaunchFlags.demo {
@@ -276,6 +337,10 @@ final class ActivityController: ObservableObject {
 
     /// "그냥 내림"
     func dismiss(placeId: String) async {
+        rideNo[placeId] = nil
+        rideCands[placeId] = nil
+        rideTargets[placeId] = nil
+        selected[placeId] = nil
         rideTasks[placeId]?.cancel()
         rideTasks[placeId] = nil
         transferRows[placeId] = nil
@@ -294,6 +359,7 @@ final class ActivityController: ObservableObject {
         let deadline = Date().addingTimeInterval(cfg.rideMaxMinutes * 60)
         var state = lastState[pid] ?? State(trains: [], fetchedAt: Date(), phase: 1, message: nil, endsAt: deadline)
         state.mode = 1
+        state.showRunner = cfg.runnerEnabled
         state.endsAt = deadline
         state.choices = []
 
@@ -308,37 +374,69 @@ final class ActivityController: ObservableObject {
         }
         guard let activity else { return }
 
-        let interval = max(5, cfg.rideRefreshSeconds)
+        // 애니메이션 tick 마다 화면을 갱신하고, every 번째 tick 에만 지하철 조회를 겸한다
+        // 캐릭터를 끄면 화면 갱신은 지하철 갱신 때만
+        let tick = cfg.runnerEnabled ? max(0.5, cfg.animSeconds) : max(1, cfg.rideRefreshSeconds)
+        let every = cfg.runnerEnabled ? max(1, Int((cfg.rideRefreshSeconds / tick).rounded())) : 1
+        let staleAfter = max(cfg.rideRefreshSeconds, tick) * 3
         var departedKey = ""
+        var alerted = Set<Int>()
+        var n = 0
+        rideNo[pid] = trainNo
         while !Task.isCancelled && Date() < deadline {
-            let (ride, err) = await fetchRide(place: place, cfg: cfg, trainNo: &trainNo)
-            if Task.isCancelled { return }
-            if var ride {
-                // 출발 상태가 같은 역에서 두 번째로 읽히면 이동 중
-                let key = ride.trainNo + "|" + ride.current
-                if ride.status == 2 {
-                    ride.moving = (key == departedKey)
-                    departedKey = key
-                } else {
-                    departedKey = ""
+            let started = Date()
+            let forced = refreshNow.remove(pid) != nil
+            if forced { departedKey = "" }
+            if n % every == 0 || forced {
+                if let want = rideNo[pid], want != trainNo { trainNo = want }
+                let (ride, err) = await fetchRide(place: place, cfg: cfg, trainNo: &trainNo)
+                if Task.isCancelled { return }
+                if var ride {
+                    // 출발 상태가 같은 역에서 두 번째로 읽히면 이동 중
+                    let key = ride.trainNo + "|" + ride.current
+                    if ride.status == 2 {
+                        ride.moving = (key == departedKey)
+                        departedKey = key
+                    } else {
+                        departedKey = ""
+                    }
+                    state.ride = ride
+                    state.message = nil
+                    state.fetchedAt = Date()
+                    rideNo[pid] = trainNo
+                } else if let err {
+                    state.message = err
                 }
-                state.ride = ride
-                state.frame = (state.frame + 1) % 4
-                state.message = nil
-                state.fetchedAt = Date()
-                lastState[pid] = state
-                await activity.update(content(state, stale: Date().addingTimeInterval(interval * 3)))
-            } else if let err {
-                state.message = err
-                await activity.update(content(state, stale: nil))
             }
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            state.frame = (state.frame + 1) % 4
+            lastState[pid] = state
+            var alert: AlertConfiguration?
+            if let target = rideTargets[pid], let r = state.ride, r.pathIndex >= 0 {
+                let ti = StationOrders.index(of: target, in: r.path)
+                if ti >= 0 {
+                    let remain = ti - r.pathIndex
+                    let stage = remain <= 0 ? 0 : (remain <= 2 ? remain : 9)
+                    if stage < 9, !alerted.contains(stage) {
+                        alerted.insert(stage)
+                        alert = alertConfig(stage, target: target)
+                        note("하차 알림 · \(target) \(stage == 0 ? "도착" : "\(stage)정거장 전")")
+                    }
+                }
+            }
+            await activity.update(content(state, stale: state.message == nil ? Date().addingTimeInterval(staleAfter) : nil),
+                                  alertConfiguration: alert)
+            n += 1
+            let wait = max(0.05, tick - Date().timeIntervalSince(started))
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
         }
         if Task.isCancelled { return }
         await activity.end(content(state, stale: nil), dismissalPolicy: .immediate)
         running[pid] = nil
         transient[pid] = nil
         rideTasks[pid] = nil
+        rideTargets[pid] = nil
+        rideNo[pid] = nil
+        rideCands[pid] = nil
         note("\(place.name) 탑승 추적 종료")
     }
 
@@ -346,7 +444,7 @@ final class ActivityController: ObservableObject {
     private func fetchRide(place: Place, cfg: AppConfig, trainNo: inout String) async -> (RideInfo?, String?) {
         let line = Lines.info(place.lineId)
         let destName = place.dest
-        let path = StationOrders.path(lineId: place.lineId, from: place.name, to: nil, dest: destName) ?? []
+        let path = StationOrders.path(lineId: place.lineId, from: place.name, to: nil, dest: destName, updn: place.updn) ?? []
 
         if LaunchFlags.demo {
             let r = DemoData.ride(step: demoRideStep)
@@ -378,11 +476,27 @@ final class ActivityController: ObservableObject {
         }
         guard let r = row else { return (nil, "노선에 열차 정보가 없습니다") }
 
+        // 같은 방향 열차를 진행 순서로 늘어놓는다(앞·뒤 열차 변경용)
+        if let ori = StationOrders.oriented(lineId: place.lineId, from: place.name, dest: destName, updn: place.updn) {
+            let names = ori.stations.map(StationOrders.norm)
+            var list: [(no: String, key: Double)] = []
+            for c in cands {
+                guard let i = names.firstIndex(of: StationOrders.norm(c.statnNm)) else { continue }
+                let st = Int(c.trainSttus) ?? 2
+                list.append((c.trainNo, Double(i) + (st == 0 ? -0.25 : (st == 2 ? 0.5 : 0))))
+            }
+            rideCands[place.id.uuidString] = list.sorted { $0.key < $1.key }
+        }
+
         let status = Int(r.trainSttus) ?? 2
         let idx = StationOrders.index(of: r.statnNm, in: path)
         let next: String? = (idx >= 0 && idx + 1 < path.count) ? path[idx + 1] : nil
-        let destLabel = r.statnTnm.isEmpty ? (destName.isEmpty ? "" : destName + "행") : r.statnTnm + "행"
+        var destLabel = r.statnTnm.isEmpty ? (destName.isEmpty ? "" : destName + "행") : r.statnTnm + "행"
+        if place.lineId == "1002", let t = Lines.loopText(place.updn) { destLabel = t }
+        var tags: [String] = []
+        if r.directAt == "1" { tags.append("급행") } else if r.directAt == "7" { tags.append("특급") }
+        if r.lstcarAt == "1" { tags.append("막차") }
         return (RideInfo(trainNo: r.trainNo, current: r.statnNm, status: status, next: next,
-                         path: path, pathIndex: idx, dest: destLabel), nil)
+                         path: path, pathIndex: idx, dest: destLabel, tags: tags), nil)
     }
 }

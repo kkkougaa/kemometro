@@ -32,13 +32,52 @@ enum Lines {
         LineInfo(id: "1032", name: "GTX-A", short: "GTX", colorHex: "#9A6292"),
     ]
 
+    /// 2호선 순환 방향 표기. 내선은 시계, 외선은 반시계 방향이다.
+    static func loopText(_ updn: String) -> String? {
+        switch updn {
+        case "내선": return "내선 · 시계"
+        case "외선": return "외선 · 반시계"
+        default: return nil
+        }
+    }
+
+    /// 명세서의 1061(중앙선)은 1063(경의중앙선)과 같은 노선으로 본다
+    static func canonical(_ id: String) -> String { id == "1061" ? "1063" : id }
+
     static func info(_ id: String) -> LineInfo {
-        all.first { $0.id == id } ?? LineInfo(id: id, name: id, short: "?", colorHex: "#8B95A1")
+        let c = canonical(id)
+        if let l = all.first(where: { $0.id == c }) { return l }
+        // 경로 API 가 알려 주는 앱 밖 노선("x:신림선")
+        if id.hasPrefix("x:") {
+            let name = String(id.dropFirst(2))
+            return LineInfo(id: id, name: name, short: String(name.prefix(2)), colorHex: "#8B95A1")
+        }
+        return LineInfo(id: id, name: id, short: "?", colorHex: "#8B95A1")
     }
 
     /// 자산 카탈로그의 공식 마크(line-1077 등). 없으면 nil.
     static func markImage(_ id: String) -> UIImage? {
         UIImage(named: "line-\(id)")
+    }
+
+    /// 메뉴·피커 안에서 쓰는 작은 동그란 마크. 메뉴는 이미지 frame 을 무시하고 원본 크기로 그려서 미리 줄여 둔다.
+    static func menuMark(_ id: String, points: CGFloat = 22) -> UIImage {
+        let size = CGSize(width: points, height: points)
+        let rect = CGRect(origin: .zero, size: size)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            UIBezierPath(ovalIn: rect).addClip()
+            if let ui = markImage(id) {
+                ui.draw(in: rect)
+            } else {
+                let line = info(id)
+                UIColor(line.color).setFill()
+                ctx.cgContext.fillEllipse(in: rect)
+                let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: points * 0.42, weight: .heavy), .foregroundColor: UIColor.white]
+                let text = NSString(string: line.short)
+                let t = text.size(withAttributes: attrs)
+                text.draw(at: CGPoint(x: (points - t.width) / 2, y: (points - t.height) / 2), withAttributes: attrs)
+            }
+        }.withRenderingMode(.alwaysOriginal)
     }
 }
 

@@ -7,19 +7,20 @@ enum DemoData {
         lineColorHex: "#D4003B", directionLabel: "신사 방면", slots: 4)
 
     static let trains: [TrainInfo] = [
-        TrainInfo(id: "d1", status: "전역", n: 1, level: 1, dest: "신사행", at: "정자", tags: [], approx: false),
+        TrainInfo(id: "d1", status: "전역", n: 1, level: 1, dest: "신사행", at: "정자", tags: ["급행"], approx: false),
         TrainInfo(id: "d2", status: "4역 전", n: 4, level: 0, dest: "신사행", at: "동천", tags: [], approx: false),
+        TrainInfo(id: "d0", status: "출발", n: 0, level: 0, dest: "신사행", at: "", tags: [], approx: false, departed: true),
     ]
 
     /// 몇 초 뒤 상태: 열차가 한 칸씩 다가온 모습(영상에서 움직임을 보여주기 위해)
     static let trainsLater: [TrainInfo] = [
-        TrainInfo(id: "d1", status: "진입", n: 0.15, level: 2, dest: "신사행", at: "", tags: [], approx: false),
+        TrainInfo(id: "d1", status: "진입", n: 0.15, level: 2, dest: "신사행", at: "", tags: ["급행", "막차"], approx: false),
         TrainInfo(id: "d2", status: "3역 전", n: 3, level: 0, dest: "신사행", at: "수지구청", tags: [], approx: false),
     ]
 
     static func state(phase: Int, slots: Int, endsAt: Date, later: Bool = false) -> TrainActivityAttributes.ContentState {
         let base = later ? trainsLater : trains
-        let trains = phase == 0 ? base.map { t -> TrainInfo in var c = t; c.n = Double(slots) + 1.2; return c } : base
+        let trains = phase == 0 ? base.map { t -> TrainInfo in var c = t; if !c.departed { c.n = Double(slots) + 1.2 }; return c } : base
         return TrainActivityAttributes.ContentState(trains: trains, fetchedAt: Date(), phase: phase, message: nil, endsAt: endsAt)
     }
 
@@ -33,7 +34,7 @@ enum DemoData {
         let status = phase == 0 ? 1 : (phase == 3 ? 0 : 2)
         return RideInfo(trainNo: "3", current: ridePath[i], status: status,
                         next: i + 1 < ridePath.count ? ridePath[i + 1] : nil,
-                        path: ridePath, pathIndex: i, dest: "신사행", moving: phase == 2)
+                        path: ridePath, pathIndex: i, dest: "신사행", moving: phase == 2, tags: ["급행", "막차"])
     }
     static func rideState(step: Int) -> TrainActivityAttributes.ContentState {
         var s = TrainActivityAttributes.ContentState(trains: trainsLater, fetchedAt: Date(), phase: 1, message: nil, endsAt: Date().addingTimeInterval(3600))

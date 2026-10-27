@@ -26,6 +26,10 @@ struct TrainActivityAttributes: ActivityAttributes {
         var directionLabel: String? = nil
         /// 탑승 중 접힌 아일랜드의 달리기 프레임(갱신마다 0→3 반복)
         var frame: Int = 0
+        /// 접힌 아일랜드에 달리는 캐릭터를 보일지(설정에서 끄면 노선 로고만)
+        var showRunner: Bool = true
+        /// 접근 모드에서 사용자가 고른 열차(없으면 가장 가까운 열차)
+        var selectedId: String? = nil
     }
 
     /// 어느 설정(역)에서 띄웠는지. 버튼 인텐트가 이 id 로 돌아온다
@@ -55,6 +59,10 @@ struct TrainInfo: Codable, Hashable, Identifiable {
     var at: String
     var tags: [String]
     var approx: Bool
+    /// 도착정보의 상행·하행·내선·외선
+    var updn: String = ""
+    /// 이 역을 막 떠난 열차(도착정보의 "출발"). 노선도 오른쪽 끝에 작게 남겨 두고 탑승 대상으로 고를 수 있다
+    var departed: Bool = false
 }
 
 /// 탑승한 열차의 현재 상태(목적지 없이 지금 위치만)
@@ -74,6 +82,8 @@ struct RideInfo: Codable, Hashable {
     var dest: String
     /// 출발한 뒤 한 번 더 같은 상태로 읽힌 경우. 다음 역으로 이동 중
     var moving: Bool? = nil
+    /// 열차종류·막차 칩("급행" "특급" "ITX" "막차")
+    var tags: [String]? = nil
 
     /// "탑승 중" 자리에 보일 상태
     var label: String {

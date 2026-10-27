@@ -38,6 +38,22 @@ extension View {
     }
 }
 
+extension View {
+    /// 큰 카드·목록용 글래스(눌림 반응 없음)
+    @ViewBuilder
+    func liquidGlassCard(cornerRadius: CGFloat = 26) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+        #else
+        self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        #endif
+    }
+}
+
 /// 글래스 알약 버튼. 주 동작(지금 미리보기 등)에 쓴다.
 struct GlassPillButton: View {
     let title: String
@@ -60,5 +76,6 @@ struct GlassPillButton: View {
             .liquidGlass(tint: prominent ? (tint ?? .accentColor) : nil)
         }
         .buttonStyle(.plain)
+        .tapHaptic()
     }
 }

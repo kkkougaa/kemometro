@@ -87,22 +87,33 @@
   .route { position: relative; height: 48px; --pad: 14px; }
   .route .rt { position: absolute; inset: 0; clip-path: inset(0 0 0 0); opacity: 1; transition: clip-path .8s var(--ease-out), opacity .4s var(--ease-out); }
   .route.enter .rt { clip-path: inset(0 0 0 100%); opacity: 0; }
-  .route .bar { position: absolute; left: var(--pad); right: var(--pad); top: 17px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.16); }
+  .route .bar { position: absolute; left: var(--pad); right: var(--padr, var(--pad)); top: 17px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.16); }
   .route .fill { position: absolute; left: var(--pad); top: 17px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, rgba(var(--lc-rgb),.18), var(--lc)); width: 0; transition: width .95s var(--spring-soft); }
   .route .tick { position: absolute; top: 19px; width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.35); transform: translate(-50%, -50%); transition: background .4s; }
   .route .tick.done { background: var(--lc); }
-  .route .end { position: absolute; right: var(--pad); top: 19px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transform: translate(50%, -50%); }
+  .route .end { position: absolute; right: var(--padr, var(--pad)); top: 19px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transform: translate(50%, -50%); }
   .route .end.pulse { animation: pulse 1.4s var(--ease-out) 1; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.55); } 100% { box-shadow: 0 0 0 12px rgba(255,255,255,0); } }
-  .route .endlbl { position: absolute; right: var(--pad); top: 30px; transform: translateX(50%); font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,.6); white-space: nowrap; }
+  .route .endlbl { position: absolute; right: var(--padr, var(--pad)); top: 30px; transform: translateX(50%); font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,.6); white-space: nowrap; }
   /* 전동차 마커: 흰 원 안에 노선색 전동차 */
-  .route .mk { position: absolute; top: 19px; left: 0; transform: translate(-50%, -50%); transition: transform .95s var(--spring-soft), opacity .3s; }
+  .shift { display: inline-flex; gap: 4px; margin-left: 5px; vertical-align: top; }
+  .shift i { font-style: normal; width: 24px; height: 17px; border-radius: 999px; background: rgba(255,255,255,.14); display: grid; place-items: center; font-size: 13px; font-weight: 800; line-height: 1; cursor: pointer; padding-bottom: 2px; }
+  .route.tagged { height: 62px; }
+  .route.tagged .rt { inset: 14px 0 0 0; }
+  .route .chips { position: absolute; top: 0; left: 0; display: flex; gap: 3px; transform: translateX(-50%); z-index: 3; transition: left .95s var(--spring-soft), opacity .3s; }
+  .route .chip { height: 14px; padding: 0 5px; border-radius: 999px; font-size: 9.5px; font-weight: 800; color: #fff; display: grid; place-items: center; white-space: nowrap; background: #E5483C; }
+  .route .chip.last { background: #5E5CE6; }
+  .route .chip.itx { background: #0A84FF; }
+  .route .mk { cursor: pointer; position: absolute; top: 19px; left: 0; transform: translate(-50%, -50%); transition: transform .95s var(--spring-soft), opacity .3s; }
   .route .mk .dot { width: 26px; height: 26px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2px #000, 0 3px 8px rgba(0,0,0,.45); }
   .route .mk .dot svg { width: 17px; height: 17px; display: block; }
   .route .mk.second .dot { width: 18px; height: 18px; opacity: .8; }
   .route .mk.second .dot svg { width: 12px; height: 12px; }
   .route .mk .lbl { position: absolute; top: 17px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 500; color: rgba(255,255,255,.55); white-space: nowrap; }
   .route .mk.second .lbl { display: none; }
+  .route .mk.gone .dot { width: 18px; height: 18px; opacity: .55; }
+  .route .mk.gone .dot svg { width: 12px; height: 12px; }
+  .route .mk.gone .lbl { display: none; }
   /* 탑승: 4정거장 창, 노선이 옆으로 흐른다 */
   .route .rt.win { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 17%, #000 83%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 17%, #000 83%, transparent 100%); }
   .strip { position: absolute; left: 0; top: 0; height: 100%; transition: transform .95s var(--spring-soft); }
@@ -232,7 +243,8 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
   var LINES = { '1077': { name: '신분당선', color: '#D4003B', rgb: '212,0,59', soft: '#ff5c7c' }, '1009': { name: '9호선', color: '#BDB092', rgb: '189,176,146', soft: '#d9cfae' }, '1002': { name: '2호선', color: '#00A84D', rgb: '0,168,77', soft: '#4ad17f' } };
   var SLOTS = 4;
   var T0 = [ { status: '전역', n: 1, lv: 1, dest: '신사행', at: '정자' }, { status: '3역 전', n: 3, lv: 0, dest: '신사행', at: '동천' } ];
-  var T1 = [ { status: '진입', n: 0.15, lv: 2, dest: '신사행', at: '' }, { status: '2역 전', n: 2, lv: 0, dest: '신사행', at: '수지구청' } ];
+  var GONE_ON = true;
+  var T1 = [ { status: '진입', n: 0.15, lv: 2, dest: '신사행', at: '', tags: ['급행', '막차'] }, { status: '2역 전', n: 2, lv: 0, dest: '신사행', at: '수지구청' } ];
   var T9 = [ { status: '2역 전', n: 2, lv: 0, dest: '중앙보훈병원행', at: '사평' }, { status: '4역 전', n: 4, lv: 0, dest: '중앙보훈병원행', at: '동작' } ];
   var RIDE_PATH = ['판교', '청계산입구', '양재시민의숲', '양재', '강남', '신논현', '논현', '신사'];
   var S = { line: '1077', station: '판교', dest: '신사행', mode: 'approach', trains: T0, ride: null };
@@ -264,10 +276,10 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
   function headHtml(id) {
     var left, lsub, hero, rsub, lv2 = false;
     if (S.mode === 'approach') {
-      var t = S.trains[0];
+      var t = S.trains[S.sel || 0] || S.trains[0];
       left = S.station; lsub = '<span class="dchip">' + S.dest + '</span>'; hero = t ? t.status : '열차 없음'; rsub = t ? (t.lv === 2 ? '곧 도착' : (t.at ? '지금 ' + t.at : '')) : ''; lv2 = !!(t && t.lv === 2);
     } else if (S.mode === 'ride') {
-      var rd = S.ride, mv = rd.ph === 'move'; left = RIDE_LABEL[rd.ph]; lsub = '<span class="dchip">' + S.dest + '</span>'; hero = mv ? (rd.next || rd.current) : rd.current; var nx = mv ? RIDE_PATH[rd.step + 2] : rd.next; rsub = nx ? '다음 ' + nx : '';
+      var rd = S.ride, mv = rd.ph === 'move'; left = RIDE_LABEL[rd.ph]; lsub = '<span class="dchip">' + S.dest + '</span><span class="shift"><i data-shift="-1">‹</i><i data-shift="1">›</i></span>'; hero = mv ? (rd.next || rd.current) : rd.current; var nx = mv ? RIDE_PATH[rd.step + 2] : rd.next; rsub = nx ? '다음 ' + nx : '';
     } else if (S.mode === 'transfer-line') {
       left = '환승'; lsub = S.station; hero = ''; rsub = '어느 노선으로?';
     } else {
@@ -282,21 +294,34 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
   function pct(n) { return 100 - (Math.min(n, SLOTS + 0.6) / SLOTS) * 100; }
   function routeHtml() {
     var s = '<div class="rt"><div class="bar"></div><div class="fill"></div>';
-    for (var i = 1; i <= SLOTS; i++) s += '<div class="tick" style="left:calc(var(--pad) + (100% - 2 * var(--pad)) * ' + (pct(i) / 100) + ')"></div>';
-    s += '<div class="end"></div><div class="endlbl">' + S.station + '</div>' + mk('first') + mk('second') + '</div>';
+    for (var i = 1; i <= SLOTS; i++) s += '<div class="tick" style="left:calc(var(--pad) + (100% - var(--pad) - var(--padr, var(--pad))) * ' + (pct(i) / 100) + ')"></div>';
+    s += '<div class="end"></div><div class="endlbl">' + S.station + '</div>' + mk('first') + mk('second') + mk('gone') + '</div><div class="chips"></div>';
     return s;
   }
+  function setChips(el, tags, x) {
+    var c = el.querySelector('.chips'); if (!c) return;
+    el.classList.toggle('tagged', tags.length > 0);
+    c.innerHTML = tags.map(function (t) { return '<span class="chip' + (t === '막차' ? ' last' : (t === 'ITX' ? ' itx' : '')) + '">' + t + '</span>'; }).join('');
+    c.style.left = Math.min(Math.max(x, 33), (el.clientWidth || 190) - 33) + 'px';
+  }
   function routeSet(el, trains, pulse) {
-    var W = el.clientWidth || 190, inner = W - 28;
+    var W = el.clientWidth || 190, padr = S.gone ? 38 : 14, inner = W - 14 - padr;
+    el.style.setProperty('--padr', padr + 'px');
     var xpx = function (n) { return 14 + inner * pct(n) / 100; };
     var mks = el.querySelectorAll('.mk');
+    var sel = Math.min(S.sel || 0, Math.max(0, trains.length - 1));
     trains.slice(0, 2).forEach(function (t, i) {
       var m = mks[i]; if (!m) return;
+      m.classList.toggle('second', i !== sel); m.classList.toggle('first', i === sel);
+      m.onclick = function (e) { e.stopPropagation(); S.sel = (sel === i ? 0 : i); render(false); };
       m.style.transform = 'translate(' + xpx(t.n) + 'px, -50%) translateX(-50%)';
       m.style.opacity = t.n > SLOTS ? 0 : 1;
-      m.querySelector('.lbl').textContent = (i === 0 && t.n > 1.1) ? (t.at || '') : '';
+      m.querySelector('.lbl').textContent = (i === sel && t.n > 1.1) ? (t.at || '') : '';
     });
     for (var i = trains.length; i < 2; i++) if (mks[i]) mks[i].style.opacity = 0;
+    if (mks[2]) { mks[2].style.opacity = S.gone ? 1 : 0; mks[2].style.transform = 'translate(' + (W - padr + 18) + 'px, -50%) translateX(-50%)'; }
+    var st = trains[sel];
+    setChips(el, (st && st.n <= SLOTS + 0.5) ? (st.tags || []) : [], st ? xpx(st.n) : 0);
     var lead = trains[0] ? Math.min(trains[0].n, SLOTS + 0.6) : SLOTS + 0.6;
     el.querySelector('.fill').style.width = Math.max(0, inner * (1 - lead / SLOTS)) + 'px';
     var end = el.querySelector('.end');
@@ -307,7 +332,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
   function rideHtml() {
     var n = RIDE_PATH.length, s = '<div class="rt win"><div class="strip"><div class="bar"></div><div class="fillw"></div>';
     for (var i = 0; i < n; i++) s += '<div class="tick" data-i="' + i + '"></div><div class="slbl" data-i="' + i + '">' + RIDE_PATH[i] + '</div>';
-    return s + '</div>' + mk('first') + '</div>';
+    return s + '</div>' + mk('first') + '</div><div class="chips"></div>';
   }
   function rideSet(el, step, departed) {
     var W = el.clientWidth || 190, pad = 14, n = RIDE_PATH.length, st = (W - 2 * pad) / 3;
@@ -323,6 +348,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
       var i = +l.getAttribute('data-i'); l.style.left = (pad + i * st) + 'px'; l.style.width = (st - 6) + 'px'; l.classList.toggle('cur', i === step);
     });
     var m = el.querySelector('.mk'); m.style.transform = 'translate(' + (pad + st) + 'px, -50%) translateX(-50%)'; m.style.opacity = 1;
+    setChips(el, S.ride.tags || [], pad + st);
   }
 
   function choicesHtml() {
@@ -332,6 +358,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
 
   var lastMode = null;
   function render(animate) {
+    S.gone = S.trains === T1;
     ['e', 'l'].forEach(function (p) {
       $(p + 'head').innerHTML = headHtml(p);
       var b = $(p + 'bottom');
@@ -347,12 +374,23 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
         rideSet(b.querySelector('.route'), S.ride.step, S.ride.departed);
       } else b.innerHTML = choicesHtml();
     });
-    var t = S.trains[0];
+    var t = S.trains[S.sel || 0] || S.trains[0];
     roll($('cst'), S.mode === 'ride' ? (S.ride.ph === 'move' ? (S.ride.next || S.ride.current) : S.ride.current) : (S.mode === 'approach' ? (t ? t.status : '–') : '환승'));
     var fox = $('fox');
     if (S.mode === 'ride') { fox.style.display = ''; fox.src = FOX[RIDE_TICK % 4]; } else fox.style.display = 'none';
     lastMode = S.mode;
     bindButtons();
+    bindShift();
+  }
+  function bindShift() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-shift]'), function (b) {
+      b.onclick = function (e) {
+        e.stopPropagation();
+        if (S.mode !== 'ride') return;
+        var d = +this.getAttribute('data-shift'), r = S.ride, nx = Math.max(0, Math.min(RIDE_PATH.length - 2, r.step + d * 2));
+        setRide(nx, 'arrive'); render(true); say(d > 0 ? '앞 열차로 바꿨어요.' : '뒤 열차로 바꿨어요.');
+      };
+    });
   }
   function bindButtons() {
     Array.prototype.forEach.call(document.querySelectorAll('[data-ride]'), function (b) {
@@ -386,7 +424,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
   }
   function resetState() {
     clearInterval(rideTimer);
-    S.mode = 'approach'; S.station = '판교'; S.dest = '신사행'; S.ride = null; S.trains = T0.map(function (t) { return Object.assign({}, t, { n: SLOTS + 1.3 }); });
+    S.mode = 'approach'; S.station = '판교'; S.dest = '신사행'; S.ride = null; S.sel = 0; S.trains = T0.map(function (t) { return Object.assign({}, t, { n: SLOTS + 1.3 }); });
     lastMode = null; setLine('1077');
   }
   function reset() {
@@ -406,7 +444,7 @@ var ICONS = {"1077": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYA
   var RIDE_TICK = 0;
   function setRide(stepNo, ph) {
     RIDE_TICK++;
-    S.ride = { step: stepNo, ph: ph, departed: ph === 'depart' || ph === 'move', current: RIDE_PATH[stepNo], next: RIDE_PATH[stepNo + 1] || '' };
+    S.ride = { tags: ['급행', '막차'], step: stepNo, ph: ph, departed: ph === 'depart' || ph === 'move', current: RIDE_PATH[stepNo], next: RIDE_PATH[stepNo + 1] || '' };
   }
   function board() {
     timers.forEach(clearTimeout); timers = [];

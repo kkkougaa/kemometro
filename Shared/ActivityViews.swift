@@ -6,7 +6,11 @@ import SwiftUI
 typealias ActivityState = TrainActivityAttributes.ContentState
 
 extension ActivityState {
-    var first: TrainInfo? { trains.first }
+    /// 이 역으로 오는 열차(막 떠난 열차 제외)
+    var live: [TrainInfo] { trains.filter { !$0.departed } }
+    var first: TrainInfo? { live.first }
+    /// 탑승 대상: 사용자가 고른 열차(막 떠난 열차 포함), 없으면 가장 가까운 열차
+    var selected: TrainInfo? { trains.first { $0.id == selectedId } ?? live.first }
     var riding: Bool { mode == 1 && ride != nil }
     var choosing: Bool { mode == 2 || mode == 3 }
 }
@@ -34,7 +38,9 @@ struct ActivityContext {
         switch s.mode {
         case 1: return s.ride?.dest
         case 2, 3: return nil
-        default: return s.first?.dest ?? (s.directionLabel ?? a.directionLabel)
+        default:
+            if lineId == "1002", let t = s.selected.flatMap({ Lines.loopText($0.updn) }) { return t }
+            return s.selected?.dest ?? (s.directionLabel ?? a.directionLabel)
         }
     }
     /// 환승 선택 중 왼쪽 작은 글자(역 이름)
@@ -44,10 +50,10 @@ struct ActivityContext {
         switch s.mode {
         case 1: return s.ride?.shownStation ?? "–"
         case 2, 3: return nil
-        default: return s.first?.status ?? (s.message == nil ? "열차 없음" : "–")
+        default: return s.selected?.status ?? (s.message == nil ? "열차 없음" : "–")
         }
     }
-    var heroAccent: Bool { s.mode == 0 && (s.first?.level ?? 0) == 2 }
+    var heroAccent: Bool { s.mode == 0 && (s.selected?.level ?? 0) == 2 }
     /// 오른쪽 작은 글자
     var heroSub: String {
         switch s.mode {
@@ -56,7 +62,8 @@ struct ActivityContext {
         case 2: return "어느 노선으로?"
         case 3: return "어디행?"
         default:
-            guard let f = s.first else { return s.message ?? "" }
+            guard let f = s.selected else { return s.message ?? "" }
+            if f.departed { return "방금 출발" }
             if f.level == 2 { return "곧 도착" }
             return f.at.isEmpty ? "" : "지금 " + f.at
         }
@@ -117,10 +124,35 @@ struct DestChip: View {
     }
 }
 
+/// 탑승 중 추적 열차 바꾸기: 왼쪽 뒤 열차, 오른쪽 앞 열차
+struct ShiftButtons: View {
+    let placeId: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(intent: ShiftTrainIntent(placeId: placeId, delta: -1)) { chevron("chevron.left") }
+            Button(intent: ShiftTrainIntent(placeId: placeId, delta: 1)) { chevron("chevron.right") }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func chevron(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 9, weight: .heavy))
+            .foregroundStyle(.primary)
+            .frame(width: 24, height: 17)
+            .background(Color.primary.opacity(0.14), in: Capsule())
+            .contentShape(Rectangle().inset(by: -5))
+    }
+}
+
 private func subLine(_ c: ActivityContext) -> some View {
     Group {
         if let chip = c.destChip {
-            DestChip(text: chip, color: c.color)
+            HStack(spacing: 5) {
+                DestChip(text: chip, color: c.color)
+                if c.s.riding { ShiftButtons(placeId: c.a.placeId) }
+            }
         } else if let t = c.plainSub {
             Text(t).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
         }
@@ -140,7 +172,7 @@ struct RideButton: View {
                 label("하차", fill: Color.primary.opacity(0.14), fg: .primary)
             }
             .buttonStyle(.plain)
-        } else if state.mode == 0, let t = state.first {
+        } else if state.mode == 0, let t = state.selected {
             Button(intent: BoardTrainIntent(placeId: attributes.placeId, trainNo: t.id)) {
                 label("탑승", fill: c.color, fg: .white)
             }
@@ -208,13 +240,15 @@ struct ActivityBottomRow: View {
 
     var body: some View {
         let c = ActivityContext(a: attributes, s: state)
+        let tags = chipTags(state)
+        let rowHeight = height + TagChips.room(tags)
         if state.choosing {
             ChoiceRow(attributes: attributes, state: state)
         } else {
             HStack(spacing: 10) {
                 if state.riding, let r = state.ride {
-                    RideProgressView(ride: r, lineId: c.lineId, markerSize: markerSize)
-                        .frame(height: height)
+                    RideProgressView(ride: r, lineId: c.lineId, markerSize: markerSize, tags: tags)
+                        .frame(height: rowHeight)
                 } else if state.trains.isEmpty {
                     Text(state.message ?? "접근 중인 열차가 없습니다")
                         .font(.system(size: 12))
@@ -223,13 +257,21 @@ struct ActivityBottomRow: View {
                 } else {
                     RouteProgressView(trains: state.trains, slots: attributes.slots, lineId: c.lineId,
                                       stationName: c.stationName, markerSize: markerSize,
-                                      pulse: (state.first?.level ?? 0) == 2, reveal: state.phase == 1)
-                        .frame(height: height)
+                                      pulse: (state.selected?.level ?? 0) == 2, reveal: state.phase == 1, tags: tags,
+                                      selectedId: state.selected?.id, placeId: attributes.placeId)
+                        .frame(height: rowHeight)
                 }
                 RideButton(attributes: attributes, state: state)
             }
         }
     }
+}
+
+/// 노선도 마커 위에 달 칩: 탑승 중이면 내 열차, 접근 중이면 가장 가까운 열차
+private func chipTags(_ s: ActivityState) -> [String] {
+    if s.riding { return s.ride?.tags ?? [] }
+    if s.mode == 0 { return s.selected?.tags ?? [] }
+    return []
 }
 
 /// 잠금화면·알림센터 배너
@@ -296,7 +338,7 @@ enum ActivityIslandParts {
     static func compactLeading(_ a: TrainActivityAttributes, _ s: ActivityState) -> some View {
         HStack(spacing: 5) {
             LineMark(lineId: s.lineId ?? a.lineId, size: 22)
-            if s.riding, let ui = UIImage(named: "runner-\(((s.frame % 4) + 4) % 4)") {
+            if s.riding, s.showRunner, let ui = UIImage(named: "runner-\(((s.frame % 4) + 4) % 4)") {
                 Image(uiImage: ui)
                     .resizable()
                     .interpolation(.high)
@@ -325,7 +367,7 @@ enum ActivityIslandParts {
         let text: String = {
             if s.riding { return "탑승" }
             if s.choosing { return "환승" }
-            guard let t = s.first else { return "–" }
+            guard let t = s.selected else { return "–" }
             return t.level == 2 ? "곧" : t.status.replacingOccurrences(of: " 전", with: "")
         }()
         return Text(text)

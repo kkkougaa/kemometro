@@ -52,7 +52,10 @@ struct Place: Codable, Identifiable, Hashable {
 }
 
 struct AppConfig: Codable {
+    /// 실시간 지하철 인증키(도착정보·열차 위치)
     var apiKey: String = ""
+    /// 일반 인증키(경로 API·역 목록). 비우면 실시간 키로 시도한다
+    var generalKey: String = ""
     var places: [Place] = AppConfig.defaultPlaces
     /// 선로 그림에 보여줄 이전 역 수
     var slots: Int = 4
@@ -62,7 +65,11 @@ struct AppConfig: Codable {
     var cooldownSeconds: Double = 300
     /// 띄워 둔 동안 다시 조회하는 간격(초)
     var refreshSeconds: Double = 5
-    /// 탑승 추적 중 조회 간격(초)
+    /// 접힌 아일랜드의 달리는 캐릭터. 끄면 노선 로고만 보이고 화면 갱신도 지하철 갱신에 맞춘다
+    var runnerEnabled: Bool = true
+    /// 탑승 추적 중 캐릭터 애니메이션 갱신 간격(초). 0.5 단위
+    var animSeconds: Double = 1
+    /// 탑승 추적 중 지하철 조회 간격(초). 항상 animSeconds 의 배수
     var rideRefreshSeconds: Double = 5
     /// 탑승 추적 최대 시간(분)
     var rideMaxMinutes: Double = 90
@@ -75,21 +82,36 @@ struct AppConfig: Codable {
     ]
 
     private enum CodingKeys: String, CodingKey {
-        case apiKey, places, slots, trainsPerDirection, cooldownSeconds, refreshSeconds, rideRefreshSeconds, rideMaxMinutes
+        case apiKey, generalKey, places, slots, trainsPerDirection, cooldownSeconds, refreshSeconds, runnerEnabled, animSeconds, rideRefreshSeconds, rideMaxMinutes
     }
 
     init() {}
 
+    /// 경로 API·역 목록에 쓸 키
+    var staticKey: String { generalKey.trimmingCharacters(in: .whitespaces).isEmpty ? apiKey : generalKey }
+
+    /// 지하철 갱신 초를 애니메이션 갱신 초의 배수로 맞춘다(최소 한 칸)
+    var rideUnit: Double { runnerEnabled ? max(0.5, animSeconds) : 1 }
+
+    mutating func snapRideRefresh() {
+        let a = rideUnit
+        rideRefreshSeconds = max(a, (rideRefreshSeconds / a).rounded() * a)
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         apiKey = (try? c.decode(String.self, forKey: .apiKey)) ?? ""
+        generalKey = (try? c.decode(String.self, forKey: .generalKey)) ?? ""
         places = (try? c.decode([Place].self, forKey: .places)) ?? AppConfig.defaultPlaces
         slots = (try? c.decode(Int.self, forKey: .slots)) ?? 4
         trainsPerDirection = (try? c.decode(Int.self, forKey: .trainsPerDirection)) ?? 2
         cooldownSeconds = (try? c.decode(Double.self, forKey: .cooldownSeconds)) ?? 300
         refreshSeconds = (try? c.decode(Double.self, forKey: .refreshSeconds)) ?? 5
+        runnerEnabled = (try? c.decode(Bool.self, forKey: .runnerEnabled)) ?? true
+        animSeconds = max(0.5, (try? c.decode(Double.self, forKey: .animSeconds)) ?? 1)
         rideRefreshSeconds = (try? c.decode(Double.self, forKey: .rideRefreshSeconds)) ?? 5
         if rideRefreshSeconds == 15 { rideRefreshSeconds = 5 }
+        snapRideRefresh()
         rideMaxMinutes = (try? c.decode(Double.self, forKey: .rideMaxMinutes)) ?? 90
     }
 }

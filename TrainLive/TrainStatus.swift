@@ -50,7 +50,9 @@ enum TrainStatus {
 
     static func tags(of r: ArrivalRow) -> [String] {
         var t: [String] = []
+        // 열차종류: 급행, ITX, 일반, 특급
         if r.btrainSttus.contains("급행") { t.append("급행") }
+        else if r.btrainSttus.contains("특급") { t.append("특급") }
         else if r.btrainSttus.uppercased().contains("ITX") { t.append("ITX") }
         if r.lstcarAt == "1" { t.append("막차") }
         return t
@@ -59,7 +61,7 @@ enum TrainStatus {
     /// 노선·방면으로 거르고 가까운 순으로 정렬한 열차 목록과 방면 라벨.
     /// dest 종착역이 맞는 열차가 있으면 그쪽, 없으면 updn 키로.
     static func trains(from rows: [ArrivalRow], lineId: String, dest: String, updn: String, limit: Int) -> (label: String, trains: [TrainInfo]) {
-        let usable = rows.filter { $0.subwayId == lineId && $0.arvlCd != "2" }
+        let usable = rows.filter { Lines.canonical($0.subwayId) == Lines.canonical(lineId) && $0.arvlCd != "2" }
         // 방향별로 묶기
         var byDir: [String: [ArrivalRow]] = [:]
         var order: [String] = []
@@ -96,10 +98,21 @@ enum TrainStatus {
                 dest: d.full,
                 at: s.level == 2 ? "" : r.arvlMsg3,
                 tags: tags(of: r),
-                approx: s.approx
+                approx: s.approx,
+                updn: r.updnLine
             )
         }
         let sorted = zip(group.map(parse), infos).sorted { $0.0.order < $1.0.order }.map { $0.1 }
-        return (label, Array(sorted.prefix(max(1, limit))))
+        var out = Array(sorted.prefix(max(1, limit)))
+        // 이 방향으로 막 떠난 열차(출발). 이미 보여 주는 열차와 겹치면 뺀다
+        if let gone = rows.first(where: {
+            Lines.canonical($0.subwayId) == Lines.canonical(lineId) && $0.arvlCd == "2" && !$0.btrainNo.isEmpty
+                && ($0.updnLine.isEmpty ? "?" : $0.updnLine) == key && !out.contains(where: { t in t.id == $0.btrainNo })
+        }) {
+            let d = TrainStatus.dest(of: gone.trainLineNm)
+            out.append(TrainInfo(id: gone.btrainNo, status: "출발", n: 0, level: 0, dest: d.full, at: "",
+                                 tags: tags(of: gone), approx: false, updn: gone.updnLine, departed: true))
+        }
+        return (label, out)
     }
 }
