@@ -8,7 +8,7 @@ struct TrainLiveApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if LaunchFlags.preview { ContentView() } else { MainView() }
+                if LaunchFlags.preview { ContentView() } else { RootView() }
             }
                 .environmentObject(ConfigStore.shared)
                 .environmentObject(LocationMonitor.shared)

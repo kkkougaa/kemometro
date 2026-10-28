@@ -22,6 +22,12 @@ TrainLive/                  앱
   DesignPreviewView         라이브 액티비티 뷰를 앱 안에서 그려 보는 화면(-preview 로 바로 진입)
   ActivityViews (Shared)    잠금화면 배너·아일랜드 조각. 위젯과 미리보기가 같은 뷰를 쓴다
   DemoData (Shared)         키 없이 쓰는 가짜 열차, 실행 플래그(-preview, -demo)
+TrainLive/RootView          번역기와 kemometro 를 같이 띄워 두고 오른쪽 위 버튼으로 전환. 켤 때는 번역기
+TrainLive/Translator/       번역기(translator.html 을 SwiftUI 로 옮긴 것, 웹뷰 아님)
+  TLText · TLPrompt         뒷정리·섞임 검사·용어집·프롬프트. HTML 판과 규칙·문구가 같아야 한다
+  Gemini                    스트리밍(SSE)·우선 처리(Interactions API)·재시도
+  TLStore                   설정·기록. UserDefaults 'tl.' + HTML 의 localStorage 키 이름
+  TranslatorModel / View    번역 흐름과 메인 화면, TLPages 는 서랍·기록·용어집·설정
 TrainLiveWidget/            위젯 익스텐션: 잠금화면 배너 + 다이내믹 아일랜드(확장·컴팩트·미니멀)
 preview/index.html          동작 흐름 HTML 목업(지오펜스 → 등장 → 갱신 → 소멸). 디자인 규격의 기준
 .github/workflows/build.yml 무서명 ipa 빌드 + 시뮬레이터 스크린샷·영상

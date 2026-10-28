@@ -98,6 +98,7 @@ struct MainView: View {
     @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var location: LocationMonitor
     @ObservedObject private var master = StationMaster.shared
+    @ObservedObject private var appSwitch = AppSwitch.shared
     @StateObject private var model = MainModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
@@ -147,13 +148,20 @@ struct MainView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             // 단축어 등으로 앱이 앞으로 올라오면 지금 위치 기준 가까운 역으로 새로 보여 준다
-            if phase == .active { refreshOnForeground() }
+            if phase == .active && appSwitch.current == .metro { refreshOnForeground() }
+        }
+        .onChange(of: appSwitch.current) { _, now in
+            // 번역기에서 넘어오면 바로 새로 받는다
+            if now == .metro { refreshOnForeground() }
         }
         .task {
             if master.stations.isEmpty && !store.config.staticKey.isEmpty { await master.refresh(apiKey: store.config.staticKey) }
             location.requestOneShot { _ in }
             while !Task.isCancelled {
-                await model.refresh(config: store.config, location: location.lastLocation)
+                // 번역기가 앞에 있을 땐 쉰다. 뒤에서 도착정보를 계속 받을 이유가 없다.
+                if appSwitch.current == .metro {
+                    await model.refresh(config: store.config, location: location.lastLocation)
+                }
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
             }
         }
@@ -197,6 +205,7 @@ struct MainView: View {
                     .liquidGlass()
             }.tapHaptic()
             .buttonStyle(.plain)
+            AppSwitcherButton()
         }
     }
 

@@ -74,6 +74,8 @@ struct StartStationOpenIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        // 앱이 열리면 번역기 말고 열차 화면이 보여야 한다
+        AppSwitch.shared.go(.metro)
         if let p = ConfigStore.shared.place(id: place.id.uuidString) {
             await ActivityController.shared.trigger(place: p, reason: "단축어(앱 열기)", force: true)
         }
