@@ -337,15 +337,28 @@ enum ActivityIslandParts {
     }
 
     static func compactLeading(_ a: TrainActivityAttributes, _ s: ActivityState) -> some View {
-        HStack(spacing: 5) {
-            LineMark(lineId: s.lineId ?? a.lineId, size: 22)
-            if s.riding, s.showRunner, let ui = UIImage(named: "runner-\(((s.frame % 4) + 4) % 4)") {
-                Image(uiImage: ui)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: 26, height: 22)
-                    .transition(.identity)
+        let c = ActivityContext(a: a, s: s)
+        return Group {
+            if s.riding && s.notice {
+                // 다음 역에 들어올 때: 로고와 캐릭터 대신 글자
+                Text("접근중")
+                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .foregroundStyle(c.color)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .transition(.opacity)
+            } else {
+                HStack(spacing: 5) {
+                    LineMark(lineId: s.lineId ?? a.lineId, size: 22)
+                    if s.riding, s.showRunner, let ui = UIImage(named: "runner-\(((s.frame % 4) + 4) % 4)") {
+                        Image(uiImage: ui)
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFit()
+                            .frame(width: 26, height: 22)
+                            .transition(.identity)
+                    }
+                }
             }
         }
         .padding(.leading, 2)

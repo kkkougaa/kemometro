@@ -99,6 +99,7 @@ struct MainView: View {
     @EnvironmentObject var location: LocationMonitor
     @ObservedObject private var master = StationMaster.shared
     @StateObject private var model = MainModel()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var query = ""
     @FocusState private var searchFocused: Bool
@@ -144,6 +145,10 @@ struct MainView: View {
         .sheet(isPresented: $showSettings) {
             ContentView(showClose: true)
         }
+        .onChange(of: scenePhase) { _, phase in
+            // 단축어 등으로 앱이 앞으로 올라오면 지금 위치 기준 가까운 역으로 새로 보여 준다
+            if phase == .active { refreshOnForeground() }
+        }
         .task {
             if master.stations.isEmpty && !store.config.staticKey.isEmpty { await master.refresh(apiKey: store.config.staticKey) }
             location.requestOneShot { _ in }
@@ -151,6 +156,13 @@ struct MainView: View {
                 await model.refresh(config: store.config, location: location.lastLocation)
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
             }
+        }
+    }
+
+    private func refreshOnForeground() {
+        model.chosenStation = nil
+        location.requestOneShot { loc in
+            Task { @MainActor in await model.refresh(config: store.config, location: loc ?? location.lastLocation) }
         }
     }
 

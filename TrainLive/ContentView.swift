@@ -96,6 +96,21 @@ struct ContentView: View {
                     Text("감시할 역")
                 }
 
+                Section("단축어 자동화") {
+                    Button {
+                        if let url = URL(string: "shortcuts://") { UIApplication.shared.open(url) }
+                    } label: {
+                        Label("단축어 앱 열기", systemImage: "arrow.up.forward.app")
+                    }.tapHaptic()
+                    DisclosureGroup("설정 방법") {
+                        Text("1. 단축어 앱 → 자동화 → 새 자동화 → 도착")
+                        Text("2. 위치에서 역을 고르고 \"즉시 실행\"")
+                        Text("3. 동작 추가 → kemometro → \"역 열차 추적 시작\" → 감시할 역 선택")
+                        Text("안 뜨면 \"(앱 열기)\" 동작으로 바꾸거나 \"앱 열기 → kemometro\"")
+                    }
+                    .font(.footnote)
+                }
+
                 Section("권한") {
                     HStack {
                         Text("위치")

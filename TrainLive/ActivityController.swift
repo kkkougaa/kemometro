@@ -29,6 +29,8 @@ final class ActivityController: ObservableObject {
     private var rideNo: [String: String] = [:]
     private var rideCands: [String: [(no: String, key: Double)]] = [:]
     private var refreshNow = Set<String>()
+    /// 출발이 읽힌 뒤 다음 역을 보여 주기까지(초)
+    private static let movingDelay: TimeInterval = 3
     private var demoFetchCount = 0
     private var demoRideStep = 0
 
@@ -380,25 +382,34 @@ final class ActivityController: ObservableObject {
         let every = cfg.runnerEnabled ? max(1, Int((cfg.rideRefreshSeconds / tick).rounded())) : 1
         let staleAfter = max(cfg.rideRefreshSeconds, tick) * 3
         var departedKey = ""
+        var departedAt: Date?
+        var approachKey = ""
+        var noticeUntil = Date.distantPast
         var alerted = Set<Int>()
         var n = 0
         rideNo[pid] = trainNo
         while !Task.isCancelled && Date() < deadline {
             let started = Date()
             let forced = refreshNow.remove(pid) != nil
-            if forced { departedKey = "" }
+            if forced { departedKey = ""; departedAt = nil; approachKey = "" }
             if n % every == 0 || forced {
                 if let want = rideNo[pid], want != trainNo { trainNo = want }
                 let (ride, err) = await fetchRide(place: place, cfg: cfg, trainNo: &trainNo)
                 if Task.isCancelled { return }
-                if var ride {
-                    // 출발 상태가 같은 역에서 두 번째로 읽히면 이동 중
+                if let ride {
+                    // 출발이 읽힌 지 movingDelay 초가 지나면 이동 중(다음 역을 크게)
                     let key = ride.trainNo + "|" + ride.current
                     if ride.status == 2 {
-                        ride.moving = (key == departedKey)
-                        departedKey = key
+                        if key != departedKey { departedKey = key; departedAt = Date() }
                     } else {
                         departedKey = ""
+                        departedAt = nil
+                    }
+                    // 다음 역에 진입하는 순간 5초 동안 접힌 아일랜드에 "접근중"
+                    if ride.status == 0 {
+                        if key != approachKey { approachKey = key; noticeUntil = Date().addingTimeInterval(5) }
+                    } else {
+                        approachKey = ""
                     }
                     state.ride = ride
                     state.message = nil
@@ -408,6 +419,12 @@ final class ActivityController: ObservableObject {
                     state.message = err
                 }
             }
+            // 출발 뒤 일정 시간이 지나면 다음 역으로(네트워크 조회 없이 매 tick 확인)
+            if var r = state.ride, r.status == 2, let at = departedAt {
+                r.moving = Date().timeIntervalSince(at) >= Self.movingDelay
+                state.ride = r
+            }
+            state.notice = Date() < noticeUntil
             state.frame = (state.frame + 1) % 4
             lastState[pid] = state
             var alert: AlertConfiguration?

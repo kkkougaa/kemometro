@@ -28,6 +28,8 @@ struct TrainActivityAttributes: ActivityAttributes {
         var frame: Int = 0
         /// 접힌 아일랜드에 달리는 캐릭터를 보일지(설정에서 끄면 노선 로고만)
         var showRunner: Bool = true
+        /// 다음 역에 들어올 때 5초 동안 접힌 아일랜드에 "접근중" 글자를 보인다
+        var notice: Bool = false
         /// 접근 모드에서 사용자가 고른 열차(없으면 가장 가까운 열차)
         var selectedId: String? = nil
     }
