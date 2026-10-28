@@ -107,14 +107,16 @@ enum Gemini {
     }
 
     /// 한 번에 받는 호출 (독음·사전·공부 등)
-    static func ask(model: String, key: String, prompt: String, maxTokens: Int = 1024, temperature: Double = 0.4) async throws -> String {
+    static func ask(model: String, key: String, prompt: String, maxTokens: Int = 1024, temperature: Double = 0.4,
+                    thinking: Bool = false) async throws -> String {
         try await withRetry {
+            var gen: [String: Any] = ["temperature": temperature, "maxOutputTokens": maxTokens]
+            if !thinking { gen["thinkingConfig"] = ["thinkingBudget": 0] }
             let body: [String: Any] = [
                 "contents": [["parts": [["text": prompt]]]],
-                "generationConfig": ["temperature": temperature, "maxOutputTokens": maxTokens,
-                                     "thinkingConfig": ["thinkingBudget": 0]]
+                "generationConfig": gen
             ]
-            let req = try request(base(model) + ":generateContent", key: key, body: body, timeout: 30)
+            let req = try request(base(model) + ":generateContent", key: key, body: body, timeout: thinking ? 90 : 30)
             let data: Data, resp: URLResponse
             do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw wrap(error) }
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
@@ -124,6 +126,34 @@ enum Gemini {
             if out.isEmpty { throw GeminiError(message: "결과를 가져오지 못했어요.") }
             return out
         }
+    }
+
+    /// 한 번에 받고 응답 JSON 을 통째로 돌려준다 (TTS·이미지처럼 글이 아닌 것을 받을 때)
+    static func generate(model: String, key: String, body: [String: Any], timeout: TimeInterval) async throws -> [String: Any] {
+        try await withRetry {
+            let req = try request(base(model) + ":generateContent", key: key, body: body, timeout: timeout)
+            let data: Data, resp: URLResponse
+            do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw wrap(error) }
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status != 200 { throw apiError(status: status, data: data) }
+            return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        }
+    }
+
+    static func parts(_ obj: [String: Any]) -> [[String: Any]] {
+        guard let c = (obj["candidates"] as? [[String: Any]])?.first,
+              let content = c["content"] as? [String: Any] else { return [] }
+        return content["parts"] as? [[String: Any]] ?? []
+    }
+
+    /// inlineData(오디오·이미지) 하나를 꺼낸다
+    static func inlineData(_ obj: [String: Any]) -> (mime: String, data: Data)? {
+        for p in parts(obj) {
+            guard let d = (p["inlineData"] ?? p["inline_data"]) as? [String: Any],
+                  let b64 = d["data"] as? String, let data = Data(base64Encoded: b64) else { continue }
+            return ((d["mimeType"] ?? d["mime_type"]) as? String ?? "", data)
+        }
+        return nil
     }
 
     /// 우선 처리 — Interactions API 에서만 받는다. 스트리밍 형식이 문서에 없어 한 번에 받는다.

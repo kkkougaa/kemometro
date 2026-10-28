@@ -64,18 +64,13 @@ struct TLDrawer: View {
             .padding(.bottom, 20)
 
             HStack(spacing: 8) {
-                Button { pick(.history) } label: {
-                    Text("번역 기록")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .liquidGlassRect(cornerRadius: 12)
-                }
-                .buttonStyle(.plain)
+                quick("번역 기록") { pick(.history) }
+                quick("대화 모드") { pick(.talk) }
             }
             .padding(.bottom, 14)
 
+            item("checkmark.circle", "공부") { pick(.study) }
+            item("note.text", "표현 노트") { pick(.words) }
             item("character.book.closed", "용어집") { pick(.glossary) }
             item("gearshape", "설정") { pick(.settings) }
 
@@ -93,6 +88,18 @@ struct TLDrawer: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color.tlCard.ignoresSafeArea())
         .shadow(color: .black.opacity(0.18), radius: 20, x: 4)
+    }
+
+    private func quick(_ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .liquidGlassRect(cornerRadius: 12)
+        }
+        .buttonStyle(.plain)
     }
 
     private func item(_ symbol: String, _ title: String, _ action: @escaping () -> Void) -> some View {
@@ -305,6 +312,23 @@ struct TLSettingsPage: View {
     @State private var banned = ""
     @State private var loaded = false
     @State private var keyVisible = false
+    @ObservedObject private var audio = TLAudio.shared
+    @State private var previewLoading = false
+
+    /// 고른 목소리·스타일로 짧은 문장을 들려준다
+    private func previewVoice() {
+        if audio.playing == "preview" { audio.stop(); return }
+        guard store.hasKey, !previewLoading else { return }
+        previewLoading = true
+        let text = TLTTS.samples[tgtLang] ?? TLTTS.samples["ja"]!
+        Task {
+            do {
+                let wav = try await TLTTS.synthesize(text, voice: store.ttsVoice)
+                try audio.play(wav, tag: "preview")
+            } catch {}
+            previewLoading = false
+        }
+    }
 
     var body: some View {
         Form {
@@ -361,6 +385,53 @@ struct TLSettingsPage: View {
                     .disabled(store.charPrompt == TLPrompt.kougaPrompt)
             }
 
+            Section("음성") {
+                LabeledContent("TTS 모델") {
+                    TextField(TLStore.defaultTTSModel, text: $store.ttsModel)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                HStack {
+                    Picker("TTS 목소리", selection: $store.ttsVoice) {
+                        ForEach(TLTTS.voices, id: \.id) { v in Text(v.id + " — " + v.desc).tag(v.id) }
+                    }
+                    Button { previewVoice() } label: {
+                        Group {
+                            if previewLoading { ProgressView().controlSize(.small) }
+                            else { Image(systemName: audio.playing == "preview" ? "stop.fill" : "play.fill") }
+                        }
+                        .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("미리듣기")
+                }
+                Picker("읽기 스타일", selection: $store.ttsStyle) {
+                    ForEach(TLTTS.styles, id: \.id) { s in Text(s.name).tag(s.id) }
+                }
+            }
+
+            Section("이미지") {
+                LabeledContent("이미지 번역 모델") {
+                    TextField(TLStore.defaultImageModel, text: $store.imageModel)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                Picker("이미지 번역 출력 크기", selection: $store.imageSize) {
+                    ForEach(TLStore.imageSizesAccepted, id: \.self) { Text($0).tag($0) }
+                }
+            }
+
+            Section("Soniox API 키") {
+                SecureField("대화 모드·말로 입력", text: $store.sonioxKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 16, design: .monospaced))
+            }
+
+            TLBackupSection()
+
             Section {
                 Link(destination: URL(string: "https://ai.google.dev/gemini-api/docs/models")!) {
                     Label("모델 목록 보기", systemImage: "arrow.up.right.square")
@@ -369,6 +440,7 @@ struct TLSettingsPage: View {
         }
         .tint(.tlAccent)
         .navigationTitle("설정")
+        .onDisappear { if audio.playing == "preview" { audio.stop() } }
         .onAppear {
             banned = store.banned(tgtLang)
             DispatchQueue.main.async { loaded = true }

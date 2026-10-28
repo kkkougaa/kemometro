@@ -35,6 +35,12 @@ final class TLStore: ObservableObject {
     @Published var autoDetect: Bool { didSet { d.set(autoDetect ? "1" : "0", forKey: k("auto_detect")) } }
     @Published var charName: String { didSet { d.set(charName, forKey: k("char_name")); _tones = nil } }
     @Published var charPrompt: String { didSet { d.set(charPrompt, forKey: k("char_prompt_default")) } }
+    @Published var sonioxKey: String { didSet { d.set(sonioxKey.trimmed, forKey: k("soniox_key")) } }
+    @Published var ttsModel: String { didSet { d.set(ttsModel.trimmed, forKey: k("gemini_tts_model")) } }
+    @Published var ttsVoice: String { didSet { d.set(ttsVoice, forKey: k("gemini_tts_voice")) } }
+    @Published var ttsStyle: String { didSet { d.set(ttsStyle, forKey: k("gemini_tts_style")) } }
+    @Published var imageModel: String { didSet { d.set(imageModel.trimmed, forKey: k("gemini_image_model")) } }
+    @Published var imageSize: String { didSet { d.set(imageSize, forKey: k("image_out_size")) } }
     @Published private(set) var history: [HistoryItem] = []
     /// 화면을 다시 그리게 하는 신호 (용어집·금지어·칩·말투가 바뀌었을 때)
     @Published private(set) var revision = 0
@@ -47,10 +53,25 @@ final class TLStore: ObservableObject {
         autoDetect = d.string(forKey: "tl.auto_detect") != "0"
         charName = d.string(forKey: "tl.char_name") ?? "코우가"
         charPrompt = d.string(forKey: "tl.char_prompt_default") ?? TLPrompt.kougaPrompt
+        sonioxKey = d.string(forKey: "tl.soniox_key") ?? ""
+        ttsModel = d.string(forKey: "tl.gemini_tts_model") ?? ""
+        ttsVoice = d.string(forKey: "tl.gemini_tts_voice") ?? "Kore"
+        ttsStyle = d.string(forKey: "tl.gemini_tts_style") ?? "natural"
+        imageModel = d.string(forKey: "tl.gemini_image_model") ?? ""
+        let legacy = ["512x512": "512", "1024x1024": "1K", "2048x2048": "2K"]
+        let size = d.string(forKey: "tl.image_out_size")?.trimmed ?? ""
+        imageSize = TLStore.imageSizesAccepted.contains(legacy[size] ?? size) ? (legacy[size] ?? size) : "1K"
         history = Self.decode([HistoryItem].self, d.data(forKey: "tl.trans_history")) ?? []
     }
 
     var effectiveModel: String { model.trimmed.isEmpty ? Self.defaultModel : model.trimmed }
+    static let defaultTTSModel = "gemini-3.1-flash-tts-preview"
+    static let defaultImageModel = "gemini-3.1-flash-image"
+    /// 이 API는 '가로x세로'가 아니라 크기 등급을 받는다
+    static let imageSizes = ["512", "1K", "2K", "4K"]
+    static let imageSizesAccepted = ["512", "512P", "512PX", "1K", "2K", "4K"]
+    var effectiveTTSModel: String { ttsModel.trimmed.isEmpty ? Self.defaultTTSModel : ttsModel.trimmed }
+    var effectiveImageModel: String { imageModel.trimmed.isEmpty ? Self.defaultImageModel : imageModel.trimmed }
     var hasKey: Bool { !apiKey.trimmed.isEmpty }
 
     private static func decode<T: Decodable>(_ t: T.Type, _ data: Data?) -> T? {
@@ -71,6 +92,11 @@ final class TLStore: ObservableObject {
         history.insert(item, at: 0)
         if history.count > 200 { history.removeLast(history.count - 200) }
         d.set(try? JSONEncoder().encode(history), forKey: k("trans_history"))
+    }
+
+    /// 백업을 불러온 뒤 저장소의 기록을 다시 읽는다. 안 그러면 다음 번역이 옛 기록으로 덮어쓴다.
+    func reloadHistory() {
+        history = Self.decode([HistoryItem].self, d.data(forKey: "tl.trans_history")) ?? []
     }
 
     func clearHistory() {

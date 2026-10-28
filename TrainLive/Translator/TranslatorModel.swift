@@ -4,6 +4,8 @@ import UIKit
 
 // 번역 화면 상태와 동작. translator.html 의 translate() · sendFeedback() 흐름을 그대로 따른다.
 
+enum ResultMode { case translate, grammar, spell, image }
+
 struct FbMsg: Identifiable, Hashable {
     let id = UUID()
     let role: String   // user · ai
@@ -46,11 +48,33 @@ final class TranslatorModel: ObservableObject {
     @Published var fbBusy = false
     @Published var toast: String?
 
-    private(set) var originalText = ""
-    private var conversation: [[String: Any]] = []
+    // 2단계 — 결과 종류 · 사진 · 역번역 · 독음
+    @Published var mode: ResultMode = .translate
+    @Published var attached: UIImage?
+    var attachedData: Data?
+    var attachedMime = "image/jpeg"
+    @Published var overlay: [OverlayItem] = []
+    /// 오버레이를 만든 그 사진 (첨부를 지워도 결과는 남는다)
+    @Published var overlayImage: UIImage?
+    @Published var madeImage: UIImage?
+    @Published var makingImage = false
+    var makeTask: Task<Void, Never>?
+    @Published var btText: String?
+    @Published var btOpen = false
+    @Published var btLoading = false
+    @Published var btWarn = ""
+    @Published var btMarks: [String] = []
+    @Published var pronText: String?
+    @Published var pronOpen = false
+    @Published var pronLoading = false
+    var pronCache: [String: String] = [:]
+    @Published var ttsLoading = false
+
+    var originalText = ""
+    var conversation: [[String: Any]] = []
     private var priorityOff = false
-    private var task: Task<Void, Never>?
-    private var reqSeq = 0
+    var task: Task<Void, Never>?
+    var reqSeq = 0
     private var detectTask: Task<Void, Never>?
 
     var toKO: Bool { srcLang != "ko" }
@@ -112,7 +136,7 @@ final class TranslatorModel: ObservableObject {
 
     /// 감지가 바꾼 대상 언어는 임시다. 한국어로 돌아오면 고른 언어를 되살린다.
     func applyAutoDetect() {
-        guard store.autoDetect, !langLocked else { return }
+        guard store.autoDetect, !langLocked, attached == nil else { return }
         var src = srcLang, tgt = tgtLang
         if input.trimmed.isEmpty { src = "ko"; tgt = userTgt }
         else {
@@ -135,6 +159,8 @@ final class TranslatorModel: ObservableObject {
     func clearResult() {
         result = ""; comment = ""; error = ""; succeeded = false
         conversation = []; fbMessages = []; usedPriority = false
+        mode = .translate
+        resetExtras()
     }
 
     func clearInput() {
@@ -168,7 +194,7 @@ final class TranslatorModel: ObservableObject {
         return pool
     }
 
-    private var genCfg: [String: Any] {
+    var genCfg: [String: Any] {
         var g: [String: Any] = ["temperature": 0.3, "maxOutputTokens": 2048]
         if !store.thinking { g["thinkingConfig"] = ["thinkingBudget": 0] }
         return g
@@ -176,7 +202,7 @@ final class TranslatorModel: ObservableObject {
     private var timeout: TimeInterval { store.thinking ? 90 : 25 }
 
     /// 우선 처리를 켰고 글 한 덩어리면 Interactions API 로, 아니면 스트리밍
-    private func stream(_ body: [String: Any], single: String?, onText: @escaping @MainActor (String) -> Void) async throws -> String {
+    func stream(_ body: [String: Any], single: String?, onText: @escaping @MainActor (String) -> Void) async throws -> String {
         let key = store.apiKey.trimmed, model = store.effectiveModel, thinking = store.thinking
         if store.priority, !priorityOff, let text = single, !text.isEmpty {
             do {
@@ -196,19 +222,23 @@ final class TranslatorModel: ObservableObject {
 
     func translate() {
         let text = input.trimmed
-        guard !text.isEmpty, !busy else { return }
+        guard !text.isEmpty || attachedData != nil, !busy else { return }
         guard store.hasKey else { error = "설정에서 Gemini API 키를 넣어주세요."; return }
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 
         busy = true; streaming = false; error = ""; usedPriority = false; succeeded = false
         result = ""; comment = ""; fbMessages = []; conversation = []
+        mode = .translate
+        resetExtras()
         reqSeq += 1
         let my = reqSeq
         let ctx = context()
         let outL = outLang, oName = outName, sLang = srcLang, tLang = tgtLang
         let toKO = self.toKO
         let parsed = TLText.parseInput(text)
-        let promptText = TLPrompt.build(text, ctx)
+        let img = attachedData, imgMime = attachedMime
+        // 글 없이 사진만 있으면 사진 속 글을 옮긴다
+        let promptText = img != nil && text.isEmpty ? TLExtras.imagePlainPrompt(tgtName: oName) : TLPrompt.build(text, ctx)
         let glossary = ctx.glossary
         let pool = userPool(parsed.reqs)
         let gen = genCfg
@@ -231,14 +261,18 @@ final class TranslatorModel: ObservableObject {
             guard let self else { return }
             defer { if my == self.reqSeq { self.busy = false; self.streaming = false } }
             do {
-                let body: [String: Any] = ["contents": [["parts": [["text": promptText]]]], "generationConfig": gen]
-                var result = try await self.stream(body, single: promptText, onText: draw).trimmed
+                var parts: [[String: Any]] = []
+                if let img { parts.append(["inline_data": ["mime_type": imgMime, "data": img.base64EncodedString()]]) }
+                parts.append(["text": promptText])
+                let body: [String: Any] = ["contents": [["parts": parts]], "generationConfig": gen]
+                // 사진이 붙으면 우선 처리(Interactions)로 못 보낸다
+                var result = try await self.stream(body, single: img == nil ? promptText : nil, onText: draw).trimmed
                 if result.isEmpty { throw GeminiError(message: "번역 결과를 받지 못했습니다.") }
                 let p0 = polish(result)
                 if p0 != result { result = p0; draw(result) }
 
                 // 대상 언어가 아닌 글자가 섞였으면 알리지 않고 한 번만 다시 부른다
-                if my == self.reqSeq {
+                if img == nil && my == self.reqSeq {
                     let allow = TLText.allowedExtraChars(srcLang: sLang, srcBody: parsed.body, pool: pool)
                     let badness: (String) -> Int = { t in
                         let b = TLText.splitComment(t).body
@@ -262,7 +296,7 @@ final class TranslatorModel: ObservableObject {
 
                 let split = TLText.splitComment(result)
                 let clean = TLText.cleanForCopy(split.body)
-                self.store.saveHistory(src: text, tgt: clean, srcLang: sLang, tgtLang: tLang)
+                if !text.isEmpty { self.store.saveHistory(src: text, tgt: clean, srcLang: sLang, tgtLang: tLang) }
                 self.originalText = parsed.body
                 self.conversation = [
                     ["role": "user", "parts": [["text": TLPrompt.feedbackSystem(source: parsed.body, result: result)]]],
@@ -273,6 +307,8 @@ final class TranslatorModel: ObservableObject {
                 self.fbMessages = []
                 self.succeeded = true
                 Haptics.light()
+                // 역번역은 접어두지 않고 번역 직후 바로 가져와 펼친다
+                if sLang == "ko" { self.toggleBackTranslation() }
             } catch is CancellationError {
             } catch {
                 guard my == self.reqSeq else { return }
@@ -339,7 +375,7 @@ final class TranslatorModel: ObservableObject {
     // MARK: 용어집 제안
 
     var glossarySuggestions: [Glossary.Suggestion] {
-        guard succeeded, srcLang == "ko", tgtLang == "ja" else { return [] }
+        guard succeeded, mode == .translate, srcLang == "ko", tgtLang == "ja" else { return [] }
         return Glossary.suggest(srcText: originalText, history: store.history, tgtLabel: TLLang.cfg(tgtLang).label,
                                 pairs: store.glossary(tgtLang), skip: store.glossarySkip(tgtLang))
     }
@@ -371,8 +407,11 @@ final class TranslatorModel: ObservableObject {
         show("복사했어요"); Haptics.light()
     }
 
+    /// 클립보드에 사진이 있으면 사진을, 아니면 글을 붙인다
     func paste() {
-        if let s = UIPasteboard.general.string, !s.isEmpty { input = String(s.prefix(2000)) }
+        let pb = UIPasteboard.general
+        if pb.hasImages, let im = pb.image { attach(im); Haptics.light(); return }
+        if let s = pb.string, !s.isEmpty { input = String(s.prefix(2000)); Haptics.light() }
     }
 
     func loadHistory(_ h: HistoryItem) {

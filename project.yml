@@ -44,6 +44,9 @@ targets:
         UIBackgroundModes: [location]
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
+        NSMicrophoneUsageDescription: 대화 모드와 말로 입력에서 목소리를 받아 적습니다.
+        NSCameraUsageDescription: 사진을 찍어 그 안의 글을 번역합니다.
+        NSPhotoLibraryAddUsageDescription: 번역한 이미지를 사진 앱에 저장합니다.
         NSLocationWhenInUseUsageDescription: 역에 가까워졌는지 알기 위해 위치를 씁니다.
         NSLocationAlwaysAndWhenInUseUsageDescription: 앱을 닫아 둔 채로도 역에 가까워지면 열차 위치를 띄우려면 "항상" 허용이 필요합니다.
         # 서울시 실시간 도착정보 API 가 http 전용이라 이 도메인만 평문 허용
