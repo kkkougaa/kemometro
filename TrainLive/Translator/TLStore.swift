@@ -19,8 +19,24 @@ final class TLStore: ObservableObject {
     @Published var priority: Bool { didSet { d.set(priority ? "1" : "0", forKey: k("gemini_priority")) } }
     @Published var autoDetect: Bool { didSet { d.set(autoDetect ? "1" : "0", forKey: k("auto_detect")) } }
     @Published var charName: String { didSet { d.set(charName, forKey: k("char_name")); _tones = nil } }
+    /// 캐릭터 X 계정 — 프로필 사진을 얼굴로 쓴다 (@ 없이)
+    @Published var charX: String {
+        didSet { d.set(charX.trimmed.replacingOccurrences(of: "@", with: ""), forKey: k("char_x")); TLAvatar.shared.refresh() }
+    }
+    /// 직접 고른 얼굴 이미지 (data URL, HTML 판 custom_icon 과 같은 형식)
+    @Published var customIcon: String {
+        didSet { if customIcon.isEmpty { d.removeObject(forKey: k("custom_icon")) } else { d.set(customIcon, forKey: k("custom_icon")) } }
+    }
     @Published var charPrompt: String { didSet { d.set(charPrompt, forKey: k("char_prompt_default")); TLShare.publish() } }
     @Published var sonioxKey: String { didSet { d.set(sonioxKey.trimmed, forKey: k("soniox_key")) } }
+    /// 하단 탭 바 밑에 까는 색 (#RRGGBB). 기본은 번역기 아이콘 캐릭터의 붉은 색.
+    @Published var barTint: String { didSet { d.set(barTint, forKey: k("bar_tint")) } }
+    /// 번역 버튼 색. 비어 있으면 강조색(초록)을 따른다.
+    @Published var buttonTint: String { didSet { d.set(buttonTint, forKey: k("button_tint")) } }
+    /// 스크롤하면 뜨는 쓰기(연필) 버튼 색. 기본은 번역기 아이콘 캐릭터의 노란색.
+    @Published var writeTint: String { didSet { d.set(writeTint, forKey: k("write_tint")) } }
+    /// 색 진하기 — 글래스 버튼과 하단 바 깔개에 같이 쓴다 (연하게 0.45 · 보통 0.7 · 진하게 1)
+    @Published var tintStrength: Double { didSet { d.set(tintStrength, forKey: k("tint_strength")) } }
     /// 말로 입력 엔진: device(기기 안) · soniox
     @Published var dictationEngine: String { didSet { d.set(dictationEngine, forKey: k("dictation_engine")) } }
     @Published var ttsModel: String { didSet { d.set(ttsModel.trimmed, forKey: k("gemini_tts_model")) } }
@@ -38,10 +54,17 @@ final class TLStore: ObservableObject {
         thinking = d.bool(forKey: "tl.thinking")
         priority = d.string(forKey: "tl.gemini_priority") == "1"
         autoDetect = d.string(forKey: "tl.auto_detect") != "0"
-        charName = d.string(forKey: "tl.char_name") ?? "코우가"
-        charPrompt = d.string(forKey: "tl.char_prompt_default") ?? TLPrompt.kougaPrompt
+        // 캐릭터 이름·프롬프트는 처음엔 비워 두고 사용자가 적는다
+        charName = d.string(forKey: "tl.char_name") ?? ""
+        charX = d.string(forKey: "tl.char_x") ?? ""
+        customIcon = d.string(forKey: "tl.custom_icon") ?? ""
+        charPrompt = d.string(forKey: "tl.char_prompt_default") ?? ""
         sonioxKey = d.string(forKey: "tl.soniox_key") ?? ""
         dictationEngine = d.string(forKey: "tl.dictation_engine") ?? "device"
+        barTint = d.string(forKey: "tl.bar_tint") ?? TLStore.defaultBarTint
+        buttonTint = d.string(forKey: "tl.button_tint") ?? ""
+        writeTint = d.string(forKey: "tl.write_tint") ?? TLStore.defaultWriteTint
+        tintStrength = d.object(forKey: "tl.tint_strength") as? Double ?? 1
         ttsModel = d.string(forKey: "tl.gemini_tts_model") ?? ""
         ttsVoice = d.string(forKey: "tl.gemini_tts_voice") ?? "Kore"
         ttsStyle = d.string(forKey: "tl.gemini_tts_style") ?? "natural"
@@ -53,6 +76,8 @@ final class TLStore: ObservableObject {
     }
 
     var effectiveModel: String { model.trimmed.isEmpty ? Self.defaultModel : model.trimmed }
+    static let defaultBarTint = "#BC2448"
+    static let defaultWriteTint = "#F2B84B"
     static let defaultTTSModel = "gemini-3.1-flash-tts-preview"
     static let defaultImageModel = "gemini-3.1-flash-image"
     /// 이 API는 '가로x세로'가 아니라 크기 등급을 받는다
@@ -122,7 +147,7 @@ final class TLStore: ObservableObject {
     var tones: [Tone] {
         if let t = _tones { return t }
         var list = Self.decode([Tone].self, d.string(forKey: k("custom_tones"))?.data(using: .utf8)) ?? TLPrompt.defaultTones
-        if let i = list.firstIndex(where: { $0.id == "character" }) { list[i].name = "🐺 \(charName) 말투" }
+        if let i = list.firstIndex(where: { $0.id == "character" }) { list[i].name = TLPrompt.characterToneName(charName) }
         _tones = list
         return list
     }

@@ -69,6 +69,10 @@ final class TranslatorModel: ObservableObject {
     @Published var pronLoading = false
     var pronCache: [String: String] = [:]
     @Published var ttsLoading = false
+    /// 결과를 손으로 고쳤나 — 고치면 독음 옆에 문법 버튼이 생긴다
+    @Published var resultEdited = false
+    @Published var checkText: String?
+    @Published var checkLoading = false
 
     var originalText = ""
     var conversation: [[String: Any]] = []
@@ -96,7 +100,7 @@ final class TranslatorModel: ObservableObject {
         case "formal": name = "정중하게"
         case "young_male": name = "20대 남성"
         case "adult": name = "성인"
-        case "character": name = "🐺 " + store.charName
+        case "character": name = store.charName.trimmed.isEmpty ? "캐릭터" : store.charName.trimmed
         case "none": name = "기본"
         default: name = store.tones.first { $0.id == tone }?.name ?? "기본"
         }
@@ -329,7 +333,9 @@ final class TranslatorModel: ObservableObject {
         guard !m.isEmpty, !busy, !fbBusy, !conversation.isEmpty else { return }
         guard store.hasKey else { error = "설정에서 Gemini API 키를 넣어주세요."; return }
         fbMessages.append(FbMsg(role: "user", text: m))
-        conversation.append(["role": "user", "parts": [["text": m]]])
+        // 손으로 고친 번역이 있으면 그걸 기준으로 고쳐 달라고 같이 보낸다
+        let ask = resultEdited ? "[지금 번역문 — 내가 직접 고쳤어]\n\(result)\n\n[요청]\n\(m)" : m
+        conversation.append(["role": "user", "parts": [["text": ask]]])
         fbBusy = true
         let outL = outLang, oName = outName, sLang = srcLang, toKO = self.toKO
         let glossary = store.glossary(tgtLang)
@@ -368,6 +374,8 @@ final class TranslatorModel: ObservableObject {
                 self.conversation.append(["role": "model", "parts": [["text": reply]]])
                 self.result = reply
                 self.comment = ""
+                self.resultEdited = false
+                self.checkText = nil
                 self.fbMessages.append(FbMsg(role: "ai", text: reply))
                 TLHaptic.done()
             } catch is CancellationError {

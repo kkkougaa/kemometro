@@ -77,18 +77,14 @@ enum TLPrompt {
         Tone(id: "formal", name: "정중하게", prompt: "원문보다 한 단계 더 정중하고 조심스러운 말투로 번역하세요. 자연스러운 정중체를 사용하되, 과도한 경어는 피하세요. 원문이 이미 반말이라도 정중하게 올려서 번역하세요."),
         Tone(id: "young_male", name: "20대 남성 말투", prompt: "20대 남성이 친한 친구에게 말하듯 번역하세요. 격식 없는 편한 반말을 사용하고, 가볍고 자연스러운 구어체로 번역하세요."),
         Tone(id: "adult", name: "성인", prompt: "성적인 내용을 번역합니다. 해당 국가에서 사용하는 성적 은어를 자연스럽고 적극적으로 적용해주세요."),
-        Tone(id: "character", name: "🐺 코우가 말투", prompt: "USE_CHAR_PROMPT")
+        Tone(id: "character", name: "캐릭터 말투", prompt: "USE_CHAR_PROMPT")
     ]
 
-    static let kougaPrompt = """
-    너는 이제부터 '코우가(KOUGA)'라는 이름의 캐릭터야. 너는 긍지 높은 늑대이자 천재 연금술사이고, 스스로를 '俺様(오레사마)'라고 부르는 아주 자신감 넘치는 녀석이지.
-    다음 규칙을 엄격히 지켜서 번역해줘:
-    1. 말투는 매우 거칠고 호탕한 소년 만화의 주인공(또는 반항적인 캐릭터)처럼 해줘.
-    2. 번역 대상 언어의 어미나 표현에서 거칠고 자신감 넘치는 말투를 사용해.
-    3. 번역 결과는 반드시 요청한 언어로만 출력해.
-    4. 사용자를 '동료'나 친근하면서도 위세 있게 대해줘.
-    5. 연금술, 모험, 늑대 등의 키워드가 나오면 아주 열광적으로 반응해.
-    """
+    /// 캐릭터 이름 칸이 비어 있을 때 말투 칩에 쓰는 이름
+    static func characterToneName(_ charName: String) -> String {
+        let n = charName.trimmed
+        return n.isEmpty ? "캐릭터 말투" : n + " 말투"
+    }
 
     /// 피드백 칩 — 결과 언어별 기본 목록
     static let fbPresets: [String: [(String, String)]] = [
@@ -181,8 +177,11 @@ enum TLPrompt {
         let none = cfg.toneInstr["none"] ?? ""
         var toneInstr = none
         if c.tone == "character" {
-            let p = c.charPrompt.trimmed.isEmpty ? kougaPrompt : c.charPrompt.trimmed
-            toneInstr = none + " 단, 다음 캐릭터 설명에 맞는 말투로 번역하세요 (반드시 \(tgt)로 번역): \"\(p)\""
+            // 캐릭터 프롬프트를 아직 안 적었으면 기본 말투로 옮긴다
+            let p = c.charPrompt.trimmed
+            if !p.isEmpty {
+                toneInstr = none + " 단, 다음 캐릭터 설명에 맞는 말투로 번역하세요 (반드시 \(tgt)로 번역): \"\(p)\""
+            }
         } else if c.tone != "none" {
             let custom = c.tones.first { $0.id == c.tone }
             let def = defaultTones.first { $0.id == c.tone }

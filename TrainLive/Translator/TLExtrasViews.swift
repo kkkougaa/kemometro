@@ -13,6 +13,9 @@ struct TLSelectableText: UIViewRepresentable {
     let text: String
     let fontSize: CGFloat
     var lineSpacing: CGFloat = 0
+    /// 결과를 그 자리에서 고칠 수 있게
+    var editable = false
+    var onEdit: ((String) -> Void)? = nil
     let onAction: (Action, String, NSRange) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -33,14 +36,19 @@ struct TLSelectableText: UIViewRepresentable {
 
     func updateUIView(_ tv: UITextView, context: Context) {
         context.coordinator.parent = self
+        tv.isEditable = editable
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
-        let attr = NSAttributedString(string: text, attributes: [
+        let attrs: [NSAttributedString.Key: Any] = [
             .font: UIFont.systemFont(ofSize: fontSize),
             .foregroundColor: UIColor.label,
             .paragraphStyle: style
-        ])
-        if tv.attributedText != attr { tv.attributedText = attr }
+        ]
+        tv.typingAttributes = attrs
+        // 고치는 중엔 글이 같으면 다시 넣지 않는다 (커서가 끝으로 튀지 않게)
+        if tv.text != text || tv.font?.pointSize != fontSize {
+            tv.attributedText = NSAttributedString(string: text, attributes: attrs)
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -52,6 +60,10 @@ struct TLSelectableText: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: TLSelectableText
         init(_ p: TLSelectableText) { parent = p }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.onEdit?(textView.text ?? "")
+        }
 
         func textView(_ textView: UITextView, editMenuForTextIn range: NSRange,
                       suggestedActions: [UIMenuElement]) -> UIMenu? {
@@ -342,29 +354,61 @@ struct TLCameraPicker: UIViewControllerRepresentable {
 
 // MARK: 후리가나 결과 (독음을 켰을 때)
 
-/// 한자 위에 읽기를 작게 단다. 루비는 UILabel 에서만 그려져서 이때는 글 고르기 메뉴를 쉰다.
-struct TLRubyText: UIViewRepresentable {
+/// 한자 위에 읽기를 작게 단다. 낱말마다 [읽기 / 글자]를 위아래로 쌓아 직접 줄을 짠다.
+/// (UILabel 루비는 줄 높이 계산에 안 들어가 윗줄 밖으로 삐져나가 잘렸다)
+/// 이때는 글 고르기·고치기를 쉰다. 복사 버튼은 글자만 복사한다.
+struct TLRubyText: View {
     let text: String
     let fontSize: CGFloat
 
-    func makeUIView(context: Context) -> UILabel {
-        let l = UILabel()
-        l.numberOfLines = 0
-        l.lineBreakMode = .byWordWrapping
-        l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        return l
+    private struct Unit { let base: String; let ruby: String? }
+
+    /// 줄(문단)별 낱말 조각. 한자 덩어리는 읽기와 한 조각, 나머지는 글자 하나씩 (영숫자는 낱말째)
+    private var paragraphs: [[Unit]] {
+        var paras: [[Unit]] = [[]]
+        for seg in TLLocal.rubySegments(text) {
+            if let r = seg.ruby, !seg.text.contains("\n") {
+                paras[paras.count - 1].append(Unit(base: seg.text, ruby: r))
+                continue
+            }
+            var word = ""
+            func flush() { if !word.isEmpty { paras[paras.count - 1].append(Unit(base: word, ruby: nil)); word = "" } }
+            for ch in seg.text {
+                if ch == "\n" { flush(); paras.append([]); continue }
+                if ch.isASCII && (ch.isLetter || ch.isNumber) { word.append(ch); continue }
+                flush()
+                paras[paras.count - 1].append(Unit(base: String(ch), ruby: nil))
+            }
+            flush()
+        }
+        return paras
     }
 
-    func updateUIView(_ l: UILabel, context: Context) {
-        // 루비가 윗줄과 안 겹치게 줄 간격을 넉넉히
-        l.attributedText = TLLocal.rubyAttributed(text, font: .systemFont(ofSize: fontSize), color: .label,
-                                                  lineSpacing: fontSize * 0.75)
+    var body: some View {
+        VStack(alignment: .leading, spacing: fontSize * 0.3) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, units in
+                if units.isEmpty {
+                    Text(" ").font(.system(size: fontSize))
+                } else {
+                    TLFlow(spacing: 0, lineSpacing: fontSize * 0.2) {
+                        ForEach(Array(units.enumerated()), id: \.offset) { _, u in unit(u) }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
-        let w = proposal.width ?? UIScreen.main.bounds.width - 64
-        uiView.preferredMaxLayoutWidth = w
-        let fit = uiView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude))
-        return CGSize(width: w, height: ceil(fit.height))
+    private func unit(_ u: Unit) -> some View {
+        VStack(spacing: 0) {
+            Text(u.ruby ?? " ")
+                .font(.system(size: fontSize * 0.5))
+                .foregroundStyle(u.ruby == nil ? Color.clear : Color.tlText2)
+                .lineLimit(1)
+                .fixedSize()
+            Text(u.base)
+                .font(.system(size: fontSize))
+                .fixedSize()
+        }
     }
 }

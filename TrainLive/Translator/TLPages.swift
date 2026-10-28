@@ -42,14 +42,11 @@ struct TLDrawer: View {
         VStack(alignment: .leading, spacing: 0) {
             Button { pick(.settings) } label: {
                 HStack(spacing: 12) {
-                    Image("kouga")
-                        .resizable().scaledToFill()
-                        .frame(width: 46, height: 46)
-                        .clipShape(Circle())
+                    TLAvatarView(size: 46)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("반가워요!").font(.system(size: 13)).foregroundStyle(Color.tlText2)
                         HStack(spacing: 4) {
-                            Text(store.hasKey ? store.charName : "API 설정 해주세요")
+                            Text(!store.hasKey ? "API 설정 해주세요" : store.charName.trimmed.isEmpty ? "번역기" : store.charName)
                                 .font(.system(size: 19, weight: .bold))
                                 .tracking(-0.5)
                                 .foregroundStyle(.primary)
@@ -64,13 +61,9 @@ struct TLDrawer: View {
             .buttonStyle(.plain)
             .padding(.bottom, 20)
 
-            HStack(spacing: 8) {
-                quick("번역 기록") { pick(.history) }
-                quick("대화 모드") { pick(.talk) }
-            }
-            .padding(.bottom, 14)
+            Divider().padding(.bottom, 6)
 
-            item("pip", "화면 소리 번역") { pick(.screen) }
+            item("clock.arrow.circlepath", "번역 기록") { pick(.history) }
             item("checkmark.circle", "공부") { pick(.study) }
             item("note.text", "표현 노트") { pick(.words) }
             item("character.book.closed", "용어집") { pick(.glossary) }
@@ -365,7 +358,53 @@ struct TLSettingsPage: View {
         }
     }
 
+    // MARK: 첫 화면 — 종류별 줄
+
     var body: some View {
+        List {
+            Section {
+                row("연결", "key.fill", Color(red: 0.19, green: 0.51, blue: 0.96),
+                    trailing: store.hasKey ? "" : "키 없음", warn: !store.hasKey) { connectionPage }
+                row("번역", "character.bubble.fill", Color.tlAccent) { translatePage }
+                row("음성", "waveform", Color(red: 0.94, green: 0.54, blue: 0.14)) { voicePage }
+                row("이미지", "photo.fill", Color(red: 0.49, green: 0.36, blue: 0.9)) { imagePage }
+            }
+            Section {
+                row("캐릭터", "person.crop.circle.fill", Color(red: 0.91, green: 0.36, blue: 0.6)) { characterPage }
+                row("모양", "paintpalette.fill", Color(tlHex: TLStore.defaultBarTint) ?? .red) { lookPage }
+            }
+            Section {
+                row("데이터", "externaldrive.fill", Color(white: 0.55)) { dataPage }
+            }
+        }
+        .tint(.tlAccent)
+        .navigationTitle("설정")
+    }
+
+    /// iOS 설정 앱처럼 색 네모 아이콘 + 이름
+    private func row<D: View>(_ title: String, _ symbol: String, _ color: Color, trailing: String = "", warn: Bool = false,
+                              @ViewBuilder _ dest: @escaping () -> D) -> some View {
+        NavigationLink {
+            dest()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(color, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Text(title)
+                Spacer()
+                if !trailing.isEmpty {
+                    Text(trailing).font(.system(size: 15)).foregroundStyle(warn ? Color.tlRed : Color.tlText2)
+                }
+            }
+        }
+    }
+
+    // MARK: 연결
+
+    private var connectionPage: some View {
         Form {
             Section("Gemini API 키") {
                 HStack {
@@ -382,8 +421,27 @@ struct TLSettingsPage: View {
                     .buttonStyle(.plain)
                 }
             }
+            Section("Soniox API 키") {
+                SecureField("대화 모드·말로 입력", text: $store.sonioxKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 16, design: .monospaced))
+            }
+            Section {
+                Link(destination: URL(string: "https://ai.google.dev/gemini-api/docs/models")!) {
+                    Label("모델 목록 보기", systemImage: "arrow.up.right.square")
+                }
+            }
+        }
+        .tint(.tlAccent)
+        .navigationTitle("연결")
+    }
 
-            Section("번역") {
+    // MARK: 번역
+
+    private var translatePage: some View {
+        Form {
+            Section {
                 LabeledContent("번역 모델") {
                     TextField(TLStore.defaultModel, text: $store.model)
                         .multilineTextAlignment(.trailing)
@@ -393,13 +451,14 @@ struct TLSettingsPage: View {
                 Toggle("Thinking 모드", isOn: $store.thinking)
                 Toggle("우선 처리", isOn: $store.priority)
                 Toggle("입력 언어 자동 감지", isOn: $store.autoDetect)
-                NavigationLink("말투 관리", value: TLRoute.tones)
-                NavigationLink("피드백 칩", value: TLRoute.chips)
+            }
+            Section {
                 Picker("결과 글자 크기", selection: $rsize) {
                     ForEach(TLResultSize.allCases) { Text($0.label).tag($0.rawValue) }
                 }
+                NavigationLink("말투 관리", value: TLRoute.tones)
+                NavigationLink("피드백 칩", value: TLRoute.chips)
             }
-
             Section {
                 TextField("〜っす\n〜だぜ → 〜だよ", text: $banned, axis: .vertical)
                     .lineLimit(3...12)
@@ -408,27 +467,28 @@ struct TLSettingsPage: View {
             } header: {
                 Text("금지 표현 · " + TLLang.cfg(tgtLang).label)
             }
+        }
+        .tint(.tlAccent)
+        .navigationTitle("번역")
+        .onAppear {
+            loaded = false
+            banned = store.banned(tgtLang)
+            DispatchQueue.main.async { loaded = true }
+        }
+    }
 
-            Section("캐릭터") {
-                LabeledContent("이름") {
-                    TextField("예: 코우가", text: $store.charName).multilineTextAlignment(.trailing)
+    // MARK: 음성
+
+    private var voicePage: some View {
+        Form {
+            Section("말로 입력") {
+                Picker("받아쓰기", selection: $store.dictationEngine) {
+                    Text("기기 안").tag("device")
+                    Text("Soniox").tag("soniox")
                 }
-                TextField("캐릭터 프롬프트", text: $store.charPrompt, axis: .vertical)
-                    .lineLimit(4...14)
-                    .font(.system(size: 15))
-                Button("기본 프롬프트로 되돌리기") { store.charPrompt = TLPrompt.kougaPrompt }
-                    .disabled(store.charPrompt == TLPrompt.kougaPrompt)
+                .pickerStyle(.segmented)
             }
-
-            Section("앱 아이콘") {
-                HStack(spacing: 22) {
-                    iconTile(nil, image: "logo", name: "kemometro")
-                    iconTile("AppIcon-Translator", image: "kouga", name: "번역기")
-                    Spacer()
-                }
-            }
-
-            Section("음성") {
+            Section("읽어 주기") {
                 LabeledContent("TTS 모델") {
                     TextField(TLStore.defaultTTSModel, text: $store.ttsModel)
                         .multilineTextAlignment(.trailing)
@@ -436,7 +496,7 @@ struct TLSettingsPage: View {
                         .autocorrectionDisabled()
                 }
                 HStack {
-                    Picker("TTS 목소리", selection: $store.ttsVoice) {
+                    Picker("목소리", selection: $store.ttsVoice) {
                         ForEach(TLTTS.voices, id: \.id) { v in Text(v.id + " — " + v.desc).tag(v.id) }
                     }
                     Button { previewVoice() } label: {
@@ -453,49 +513,105 @@ struct TLSettingsPage: View {
                     ForEach(TLTTS.styles, id: \.id) { s in Text(s.name).tag(s.id) }
                 }
             }
+        }
+        .tint(.tlAccent)
+        .navigationTitle("음성")
+        .onDisappear { if audio.playing == "preview" { audio.stop() } }
+    }
 
-            Section("이미지") {
+    // MARK: 이미지
+
+    private var imagePage: some View {
+        Form {
+            Section {
                 LabeledContent("이미지 번역 모델") {
                     TextField(TLStore.defaultImageModel, text: $store.imageModel)
                         .multilineTextAlignment(.trailing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
-                Picker("이미지 번역 출력 크기", selection: $store.imageSize) {
+                Picker("출력 크기", selection: $store.imageSize) {
                     ForEach(TLStore.imageSizesAccepted, id: \.self) { Text($0).tag($0) }
-                }
-            }
-
-            Section("말로 입력") {
-                Picker("받아쓰기", selection: $store.dictationEngine) {
-                    Text("기기 안").tag("device")
-                    Text("Soniox").tag("soniox")
-                }
-                .pickerStyle(.segmented)
-            }
-
-            Section("Soniox API 키") {
-                SecureField("대화 모드·말로 입력", text: $store.sonioxKey)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.system(size: 16, design: .monospaced))
-            }
-
-            TLBackupSection()
-
-            Section {
-                Link(destination: URL(string: "https://ai.google.dev/gemini-api/docs/models")!) {
-                    Label("모델 목록 보기", systemImage: "arrow.up.right.square")
                 }
             }
         }
         .tint(.tlAccent)
-        .navigationTitle("설정")
-        .onDisappear { if audio.playing == "preview" { audio.stop() } }
-        .onAppear {
-            banned = store.banned(tgtLang)
-            DispatchQueue.main.async { loaded = true }
+        .navigationTitle("이미지")
+    }
+
+    // MARK: 캐릭터
+
+    private var characterPage: some View {
+        Form {
+            Section {
+                TLAvatarPicker()
+                LabeledContent("이름") {
+                    TextField("캐릭터 이름", text: $store.charName).multilineTextAlignment(.trailing)
+                }
+                LabeledContent("X 계정") {
+                    TextField("@ 없이", text: $store.charX)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+            Section("캐릭터 프롬프트") {
+                TextField("말투 설명", text: $store.charPrompt, axis: .vertical)
+                    .lineLimit(4...14)
+                    .font(.system(size: 15))
+            }
         }
+        .tint(.tlAccent)
+        .navigationTitle("캐릭터")
+    }
+
+    // MARK: 모양
+
+    private var lookPage: some View {
+        Form {
+            Section("색") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("하단 바")
+                    TLSwatchRow(colors: TLPalette.bar, selection: $store.barTint)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("번역 버튼")
+                    TLSwatchRow(colors: TLPalette.button, selection: $store.buttonTint)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("쓰기 버튼")
+                    TLSwatchRow(colors: TLPalette.write, selection: $store.writeTint)
+                }
+            }
+            Section("진하기") {
+                Picker("진하기", selection: $store.tintStrength) {
+                    Text("연하게").tag(0.45)
+                    Text("보통").tag(0.7)
+                    Text("진하게").tag(1.0)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            Section("앱 아이콘") {
+                HStack(spacing: 22) {
+                    iconTile(nil, image: "logo", name: "kemometro")
+                    iconTile("AppIcon-Translator", image: "kouga", name: "번역기")
+                    Spacer()
+                }
+            }
+        }
+        .tint(.tlAccent)
+        .navigationTitle("모양")
+    }
+
+    // MARK: 데이터
+
+    private var dataPage: some View {
+        Form {
+            TLBackupSection()
+        }
+        .tint(.tlAccent)
+        .navigationTitle("데이터")
     }
 }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-// 공유 시트의 액션 줄에 뜨는 "코우가 번역". 전체 화면으로 받되 배경을 비워 두고,
+// 공유 시트의 액션 줄에 뜨는 "translate-kemo". 전체 화면으로 받되 배경을 비워 두고,
 // 어둡게 깐 막 위에 우리 카드를 아래에서 올린다. 막을 누르면 닫힌다.
 
 final class ActionViewController: UIViewController {

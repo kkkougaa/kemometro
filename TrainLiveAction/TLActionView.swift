@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-// 공유 시트 → "코우가 번역". 앱을 열지 않고 호스트 앱 위에 작은 카드로 번역을 띄운다.
+// 공유 시트 → "translate-kemo". 앱을 열지 않고 호스트 앱 위에 작은 카드로 번역을 띄운다.
 // 번역 규칙(프롬프트·뒷정리·용어집)은 본 앱과 같은 TLPrompt · TLText 를 그대로 쓴다.
 
 extension Color {
@@ -264,7 +264,7 @@ struct TLActionView: View {
                 .resizable()
                 .frame(width: 22, height: 22)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            Text("코우가 번역")
+            Text("translate-kemo")
                 .font(.system(size: 16, weight: .bold))
                 .tracking(-0.4)
             Spacer()

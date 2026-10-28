@@ -143,7 +143,7 @@ targets:
     info:
       path: TrainLiveAction/Info.plist
       properties:
-        CFBundleDisplayName: 코우가 번역
+        CFBundleDisplayName: translate-kemo
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
@@ -179,7 +179,7 @@ targets:
     info:
       path: TrainLiveTranslate/Info.plist
       properties:
-        CFBundleDisplayName: 코우가 번역
+        CFBundleDisplayName: translate-kemo
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         com.apple.developer.translation-ui-provider.network-access: true

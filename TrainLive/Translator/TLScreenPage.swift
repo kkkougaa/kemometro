@@ -91,19 +91,11 @@ struct TLScreenPage: View {
     private var heroCard: some View {
         VStack(spacing: 14) {
             TLPiPHost(layer: pip.layer)
-                .aspectRatio(4 / 3, contentMode: .fit)
+                .aspectRatio(m.canvas.width / m.canvas.height, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .animation(.snappy(duration: 0.3), value: m.wide)
 
-            ZStack {
-                Circle().fill(m.broadcasting ? Color.tlRed.opacity(0.12) : Color.tlAccent.opacity(0.12))
-                RoundedRectangle(cornerRadius: m.broadcasting ? 7 : 17, style: .continuous)
-                    .fill(m.broadcasting ? Color.tlRed : Color.tlAccent)
-                    .frame(width: m.broadcasting ? 28 : 34, height: m.broadcasting ? 28 : 34)
-                TLBroadcastPicker()
-            }
-            .frame(width: 86, height: 86)
-            .animation(.spring(duration: 0.35, bounce: 0.2), value: m.broadcasting)
-            .accessibilityLabel(m.broadcasting ? "화면 기록 멈추기" : "화면 기록 시작")
+            recordButton
 
             VStack(spacing: 2) {
                 let st = stateText
@@ -122,22 +114,54 @@ struct TLScreenPage: View {
             }
 
             Button { m.togglePiP() } label: {
-                Text(pip.active ? "자막 창 닫기" : "자막 창 띄우기")
+                Label(pip.active ? "자막 창 닫기" : "자막 창 띄우기", systemImage: pip.active ? "pip.exit" : "pip.enter")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(pip.possible || pip.active ? Color.tlOnAccent : Color.tlText3)
+                    .foregroundStyle(pip.active ? Color.primary : Color.tlOnAccent)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(pip.possible || pip.active ? Color.tlAccent : Color.tlFill,
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .frame(height: 50)
+                    .contentShape(Capsule())
+                    .modifier(TLPipButtonGlass(active: pip.active))
             }
             .buttonStyle(.plain)
             .tapHaptic()
+            .opacity(pip.possible || pip.active ? 1 : 0.45)
             .disabled(!pip.possible && !pip.active)
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
         .padding(.bottom, 18)
         .tlCard()
+    }
+
+    /// 제어 센터의 화면 기록 버튼 모양 — 글래스 원 안에 기록 점. 기록 중이면 빨간 글래스에 정지 네모.
+    private var recordButton: some View {
+        ZStack {
+            ZStack {
+                if m.broadcasting {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white)
+                        .frame(width: 24, height: 24)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Circle()
+                        .strokeBorder(Color.primary.opacity(0.85), lineWidth: 3)
+                        .frame(width: 40, height: 40)
+                    Circle()
+                        .fill(Color(red: 1, green: 0.23, blue: 0.19))
+                        .frame(width: 28, height: 28)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(width: 78, height: 78)
+            .liquidGlass(tint: m.broadcasting ? Color(red: 1, green: 0.23, blue: 0.19) : nil)
+            .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+            // 실제로 눌리는 건 위에 투명하게 덮은 시스템 버튼
+            TLBroadcastPicker()
+                .frame(width: 78, height: 78)
+                .clipShape(Circle())
+        }
+        .animation(.spring(duration: 0.35, bounce: 0.25), value: m.broadcasting)
+        .accessibilityLabel(m.broadcasting ? "화면 기록 멈추기" : "화면 기록 시작")
     }
 
     private func elapsed(from a: Date, to b: Date) -> String {
@@ -155,6 +179,77 @@ struct TLScreenPage: View {
                 .changeHaptic(m.showSrc)
                 .padding(.horizontal, 16)
                 .frame(minHeight: 48)
+            Divider().padding(.leading, 16)
+            HStack {
+                Text("모양").font(.system(size: 16))
+                Spacer()
+                Picker("모양", selection: $m.wide) {
+                    Text("기본").tag(false)
+                    Text("가로로 길게").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 170)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
+            Divider().padding(.leading, 16)
+            HStack {
+                Text("이전 대화").font(.system(size: 16))
+                Spacer()
+                Picker("이전 대화", selection: $m.history) {
+                    ForEach([0, 1, 2, 3, 5], id: \.self) { n in Text(n == 0 ? "없음" : "\(n)").tag(n) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
+            Divider().padding(.leading, 16)
+            HStack {
+                Text("글꼴").font(.system(size: 16))
+                Spacer()
+                Picker("글꼴", selection: $m.captionFont) {
+                    Text("기본").tag("default")
+                    Text("둥근").tag("rounded")
+                    Text("명조").tag("serif")
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 170)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
+            Divider().padding(.leading, 16)
+            HStack {
+                Text("띠 색").font(.system(size: 16))
+                Spacer()
+                HStack(spacing: 9) {
+                    ForEach(TLCaptionView.barChoices, id: \.id) { c in
+                        Button { m.captionBar = c.id; TLHaptic.select() } label: {
+                            Circle()
+                                .fill(c.color)
+                                .frame(width: 24, height: 24)
+                                .overlay(Circle().stroke(Color.primary.opacity(m.captionBar == c.id ? 0.85 : 0), lineWidth: 2).padding(-3.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
+            Divider().padding(.leading, 16)
+            HStack {
+                Text("줄 간격").font(.system(size: 16))
+                Spacer()
+                Picker("줄 간격", selection: $m.captionSpacing) {
+                    Text("좁게").tag(0.75)
+                    Text("보통").tag(1.0)
+                    Text("넓게").tag(1.35)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 170)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
             Divider().padding(.leading, 16)
             HStack {
                 Text("글자 크기").font(.system(size: 16))
@@ -198,5 +293,13 @@ struct TLScreenPage: View {
         UIPasteboard.general.string = m.lines.map { l in [l.src, l.dst].filter { !$0.isEmpty }.joined(separator: "\n") }
             .joined(separator: "\n\n")
         TLHaptic.copy()
+    }
+}
+
+/// 자막 창 띄우기 — 강조색 글래스, 띄워져 있으면 맑은 글래스
+private struct TLPipButtonGlass: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        if active { content.liquidGlass() } else { content.tlAccentGlass() }
     }
 }

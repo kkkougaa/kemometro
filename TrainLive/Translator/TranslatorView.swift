@@ -4,26 +4,32 @@ import UIKit
 
 // 번역기 메인 화면. translator.html 의 배치를 그대로 옮겼다:
 // 헤더 → 언어 바 → 입력 카드 → 번역 옵션 → 결과 → 피드백. 메뉴는 왼쪽 서랍.
+// 아래 탭 바(iOS 26 에선 리퀴드 글래스): 번역 · PIP 번역 · 대화 모드 · 설정
 
 enum TLRoute: Hashable { case history, glossary, settings, tones, chips, study, words, talk, screen }
+enum TLTab: Hashable { case home, screen, talk, settings }
 
 struct TranslatorView: View {
     @StateObject private var m = TranslatorModel()
     @ObservedObject private var store = TLStore.shared
     @State private var path: [TLRoute] = []
+    @State private var setPath: [TLRoute] = []
+    @State private var tab: TLTab = .home
+    /// 아래로 스크롤하면 탭 바를 접고 오른쪽 아래에 쓰기 버튼을 띄운다
+    @State private var barCollapsed = false
     @State private var drawerOpen = false
     @State private var optOpen = false
     @State private var fbText = ""
     @FocusState private var focus: Field?
     @AppStorage("tl.result_size") private var rsize = TLResultSize.md.rawValue
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @Namespace private var pillNS
     @ObservedObject private var audio = TLAudio.shared
     @ObservedObject private var dictation = TLDictation.shared
     @ObservedObject private var deviceDictation = TLDeviceDictation.shared
     @State private var dictTarget: TLDictTarget?
     @State private var showBig = false
-    @State private var showImgSource = false
     @State private var showCamera = false
     @State private var showPhotos = false
     @State private var photoItem: PhotosPickerItem?
@@ -36,24 +42,91 @@ struct TranslatorView: View {
     private var useDevice: Bool { store.dictationEngine != "soniox" || !dictation.available }
 
     var body: some View {
+        TabView(selection: $tab) {
+            homeStack
+                .tlBottomFade()
+                .tabItem { Label("번역", systemImage: "character.bubble") }
+                .tag(TLTab.home)
+            NavigationStack { TLScreenPage() }
+                .tlBottomFade()
+                .tabItem { Label("PIP 번역", systemImage: "pip") }
+                .tag(TLTab.screen)
+            NavigationStack { TLTalkPage(otherLang: m.tgtLang) }
+                .tlBottomFade()
+                .tabItem { Label("대화 모드", systemImage: "bubble.left.and.text.bubble.right") }
+                .tag(TLTab.talk)
+            NavigationStack(path: $setPath) {
+                TLSettingsPage(tgtLang: m.tgtLang)
+                    .navigationDestination(for: TLRoute.self) { r in routeView(r) }
+            }
+            .tlBottomFade()
+            .tabItem { Label("설정", systemImage: "gearshape") }
+            .tag(TLTab.settings)
+        }
+        .overlay {
+            TLDrawer(open: $drawerOpen) { route in
+                if route == .settings { tab = .settings } else { tab = .home; path = [route] }
+            }
+        }
+        .tint(.tlAccent)
+        .task { TLShare.publish() }
+    }
+
+    @ViewBuilder
+    private func routeView(_ r: TLRoute) -> some View {
+        switch r {
+        case .history: TLHistoryPage { h in m.loadHistory(h); path = []; tab = .home }
+        case .glossary: TLGlossaryPage(lang: m.tgtLang)
+        case .settings: TLSettingsPage(tgtLang: m.tgtLang)
+        case .tones: TLTonesPage()
+        case .chips: TLChipsPage(outLang: m.outLang)
+        case .study: TLStudyPage(tgtLang: m.tgtLang)
+        case .words: TLWordsPage()
+        case .talk: TLTalkPage(otherLang: m.tgtLang)
+        case .screen: TLScreenPage()
+        }
+    }
+
+    private var homeStack: some View {
         NavigationStack(path: $path) {
             ZStack(alignment: .bottom) {
                 Color.tlBg.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 12) {
-                        header
-                        langBar
-                        inputCard
-                        optionsCard
-                        resultCard
-                        if m.succeeded { feedbackCard.transition(.opacity.combined(with: .move(edge: .bottom))) }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            header.id("top")
+                            langBar
+                            inputCard
+                            optionsCard
+                            resultCard
+                            if m.succeeded { feedbackCard.transition(.opacity.combined(with: .move(edge: .bottom))) }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        .padding(.bottom, 30)
+                        .animation(.snappy(duration: 0.28), value: m.succeeded)
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: TLScrollOffsetKey.self, value: g.frame(in: .named("homeScroll")).minY)
+                        })
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 30)
-                    .animation(.snappy(duration: 0.28), value: m.succeeded)
+                    .coordinateSpace(name: "homeScroll")
+                    .scrollDismissesKeyboard(.interactively)
+                    .onPreferenceChange(TLScrollOffsetKey.self) { y in
+                        // 조금 내려가면 접고, 거의 맨 위로 돌아오면 편다
+                        let collapse = y < -90
+                        if collapse != barCollapsed {
+                            withAnimation(.spring(duration: 0.38, bounce: 0.18)) { barCollapsed = collapse }
+                        }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if barCollapsed && focus == nil {
+                            writeButton(proxy)
+                                .padding(.trailing, 18)
+                                .padding(.bottom, 10)
+                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                        }
+                    }
                 }
-                .scrollDismissesKeyboard(.interactively)
 
                 if let t = m.toast {
                     Text(t)
@@ -65,6 +138,7 @@ struct TranslatorView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .toolbar(barCollapsed ? .hidden : .visible, for: .tabBar)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     if focus == .input {
@@ -94,29 +168,26 @@ struct TranslatorView: View {
                     photoItem = nil
                 }
             }
-            .confirmationDialog("사진", isPresented: $showImgSource, titleVisibility: .hidden) {
-                Button("사진 찍기") { showCamera = true }
-                Button("앨범에서 선택") { showPhotos = true }
-            }
-            .navigationDestination(for: TLRoute.self) { r in
-                switch r {
-                case .history: TLHistoryPage { h in m.loadHistory(h); path = [] }
-                case .glossary: TLGlossaryPage(lang: m.tgtLang)
-                case .settings: TLSettingsPage(tgtLang: m.tgtLang)
-                case .tones: TLTonesPage()
-                case .chips: TLChipsPage(outLang: m.outLang)
-                case .study: TLStudyPage(tgtLang: m.tgtLang)
-                case .words: TLWordsPage()
-                case .talk: TLTalkPage(otherLang: m.tgtLang)
-                case .screen: TLScreenPage()
-                }
-            }
+            .navigationDestination(for: TLRoute.self) { r in routeView(r) }
         }
-        .overlay {
-            TLDrawer(open: $drawerOpen) { route in path = [route] }
+    }
+
+    /// 접힌 탭 바 자리의 쓰기 버튼 — 맨 위로 올라가 입력칸에 키보드를 연다
+    private func writeButton(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            withAnimation(.spring(duration: 0.45, bounce: 0.12)) { proxy.scrollTo("top", anchor: .top) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focus = .input }
+        } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(TLPalette.ink(on: store.writeTint, strength: store.tintStrength, dark: colorScheme == .dark))
+                .frame(width: 56, height: 56)
+                .tlAccentGlass(color: TLPalette.writeColor)
+                .contentShape(Circle())
         }
-        .tint(.tlAccent)
-        .task { TLShare.publish() }
+        .buttonStyle(.plain)
+        .tapHaptic()
+        .accessibilityLabel("쓰기")
     }
 
     // MARK: 헤더
@@ -237,7 +308,11 @@ struct TranslatorView: View {
             HStack(spacing: 2) {
                 toolButton("doc.on.clipboard", "붙여넣기") { m.paste() }
                 toolButton("xmark", "지우기") { m.clearInput(); focus = .input }
-                Button { focus = nil; showImgSource = true } label: {
+                // 버튼 바로 위에 펼쳐지는 메뉴
+                Menu {
+                    Button { focus = nil; showCamera = true } label: { Label("사진 찍기", systemImage: "camera") }
+                    Button { focus = nil; showPhotos = true } label: { Label("앨범에서 선택", systemImage: "photo.on.rectangle") }
+                } label: {
                     Image(systemName: "camera")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(m.attached != nil ? Color.tlAccent : Color.tlText2)
@@ -245,7 +320,6 @@ struct TranslatorView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .tapHaptic()
                 .accessibilityLabel("사진")
                 if useDevice || dictation.available {
                     let on = useDevice ? deviceDictation.active : dictation.active
@@ -327,11 +401,12 @@ struct TranslatorView: View {
                 }
             }
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(Color.tlOnAccent)
+            .foregroundStyle(store.buttonTint.isEmpty && store.tintStrength >= 1 ? Color.tlOnAccent
+                             : TLPalette.ink(on: store.buttonTint, strength: store.tintStrength, dark: colorScheme == .dark))
             .frame(maxWidth: .infinity)
             .frame(height: 48)
             .contentShape(Rectangle())
-            .tlAccentGlass(cornerRadius: 12)
+            .tlAccentGlass(cornerRadius: 12, color: TLPalette.buttonColor)
         }
         .buttonStyle(.plain)
         .tapHaptic()
@@ -450,11 +525,8 @@ struct TranslatorView: View {
         } label: {
             HStack(spacing: 6) {
                 if t.id == "character" {
-                    Image("kouga")
-                        .resizable().scaledToFill()
-                        .frame(width: 22, height: 22)
-                        .clipShape(Circle())
-                    Text(store.charName + " 말투")
+                    TLAvatarView(size: 22, placeholderTint: on ? Color.tlOnAccent : Color.tlText2)
+                    Text(TLPrompt.characterToneName(store.charName))
                 } else {
                     Text(t.name)
                 }
@@ -499,6 +571,12 @@ struct TranslatorView: View {
                     viewOpt(active: m.pronOpen, label: "독음") {
                         if m.pronLoading { ProgressView().controlSize(.mini) } else { Text("독음") }
                     } action: { m.togglePron() }
+                    if m.canCheckEdited {
+                        viewOpt(active: m.checkText != nil, label: "문법") {
+                            if m.checkLoading { ProgressView().controlSize(.mini) } else { Text("문법") }
+                        } action: { m.checkEdited() }
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    }
                     viewOpt(active: false, label: "크게 보기") {
                         Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 12, weight: .semibold))
                     } action: { showBig = true }
@@ -519,10 +597,12 @@ struct TranslatorView: View {
                 TLRubyText(text: m.result, fontSize: resultFont)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
-                    .padding(.top, 10 + resultFont * 0.45)
+                    .padding(.top, 8)
                     .padding(.bottom, 12)
             } else if !m.result.isEmpty {
-                TLSelectableText(text: m.result, fontSize: resultFont, lineSpacing: resultFont * 0.42) { kind, text, range in
+                TLSelectableText(text: m.result, fontSize: resultFont, lineSpacing: resultFont * 0.42,
+                                 editable: m.mode == .translate && !m.busy && !m.fbBusy,
+                                 onEdit: { m.editResult($0) }) { kind, text, range in
                     dictTarget = TLDictTarget(text: text, range: range, mode: kind)
                     Haptics.light()
                 }
@@ -581,12 +661,39 @@ struct TranslatorView: View {
                 .transition(.opacity)
             }
 
+            if let c = m.checkText { checkBox(c) }
+
             if m.showBackTranslation { backTranslation }
 
             resultFooter
         }
         .tlCard()
         .animation(.easeOut(duration: 0.2), value: m.comment.isEmpty)
+    }
+
+    /// 고친 결과의 문법 체크 — 기존 문법 체크와 같은 형식으로 보여 주고, 수정 표현이 있으면 바로 넣는다
+    private func checkBox(_ c: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("문법 체크").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.tlAccentDark)
+                Spacer()
+                Button { withAnimation(.snappy(duration: 0.2)) { m.checkText = nil } } label: {
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.tlText3)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("닫기")
+            }
+            Text(c).font(.system(size: 13.5)).lineSpacing(3).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if m.checkFix != nil {
+                TLFillButton(title: "수정 표현 넣기", active: true) { m.applyCheckFix() }
+            }
+        }
+        .padding(.horizontal, 13).padding(.vertical, 11)
+        .background(Color.tlFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .transition(.opacity)
     }
 
     private func viewOpt<L: View>(active: Bool, label: String, @ViewBuilder content: () -> L,
@@ -887,4 +994,10 @@ struct TranslatorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 9)
     }
+}
+
+/// 번역 화면 스크롤 위치 (맨 위가 0, 내려갈수록 음수)
+struct TLScrollOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

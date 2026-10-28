@@ -10,6 +10,7 @@ extension TranslatorModel {
         btText = nil; btOpen = false; btLoading = false; btWarn = ""; btMarks = []
         pronText = nil; pronOpen = false; pronLoading = false
         overlay = []; overlayImage = nil; madeImage = nil
+        resultEdited = false; checkText = nil; checkLoading = false
         makeTask?.cancel(); makeTask = nil; makingImage = false
         if TLAudio.shared.playing == "result" { TLAudio.shared.stop() }
     }
@@ -202,35 +203,12 @@ extension TranslatorModel {
         ]
         let body: [String: Any] = ["contents": [["parts": parts]], "generationConfig": gen]
         let model = store.effectiveModel, key = store.apiKey.trimmed
-        let tgtName = outName
-        let glossaryText = Glossary.instr(Glossary.serialize(store.glossary(tgtLang)), pairs: store.glossary(tgtLang), toKO: toKO)
         task = Task { [weak self] in
             do {
-                var items: [OverlayItem] = []
-                // ① 기기 안 글자 인식 → 글만 번역
-                let ocr = await TLLocal.recognize(image)
-                if !ocr.isEmpty {
-                    var g: [String: Any] = ["temperature": 0.2, "maxOutputTokens": 4096, "responseMimeType": "application/json",
-                                            "responseSchema": ["type": "ARRAY", "items": ["type": "STRING"]] as [String: Any]]
-                    if !thinking { g["thinkingConfig"] = ["thinkingBudget": 0] }
-                    let prompt = TLLocal.overlayTranslatePrompt(ocr.map(\.text), tgtName: tgtName, glossary: glossaryText)
-                    let tb: [String: Any] = ["contents": [["parts": [["text": prompt]]]], "generationConfig": g]
-                    if let obj = try? await Gemini.generate(model: model, key: key, body: tb, timeout: thinking ? 90 : 40),
-                       let data = Gemini.parts(obj).compactMap({ $0["text"] as? String }).joined().data(using: .utf8),
-                       let arr = try? JSONSerialization.jsonObject(with: data) as? [String], arr.count == ocr.count {
-                        items = zip(ocr, arr).compactMap { o, t in
-                            let dst = t.trimmed
-                            return dst.isEmpty ? nil : OverlayItem(box: o.box, src: o.text, dst: dst)
-                        }
-                    }
-                }
-                guard !Task.isCancelled else { return }
-                // ② 글자를 못 찾았거나 번역이 어긋나면 사진째 보내 위치까지 받는다
-                if items.isEmpty {
-                    let obj = try await Gemini.generate(model: model, key: key, body: body, timeout: thinking ? 120 : 60)
-                    let raw = Gemini.parts(obj).compactMap { $0["text"] as? String }.joined()
-                    items = TLExtras.parseOverlay(raw)
-                }
+                // 글자 찾기·위치·번역 모두 Gemini 가 사진을 보고 한다 (기기 안 인식은 품질이 모자랐다)
+                let obj = try await Gemini.generate(model: model, key: key, body: body, timeout: thinking ? 120 : 60)
+                let raw = Gemini.parts(obj).compactMap { $0["text"] as? String }.joined()
+                let items = TLExtras.parseOverlay(raw)
                 guard let self, my == self.reqSeq else { return }
                 if items.isEmpty { throw GeminiError(message: "이미지에서 글자를 찾지 못했어요.") }
                 self.overlayImage = image
@@ -287,6 +265,58 @@ extension TranslatorModel {
         UIImageWriteToSavedPhotosAlbum(im, nil, nil, nil)
         show("사진에 저장했어요")
         TLHaptic.copy()
+    }
+
+    // MARK: 결과 직접 고치기 · 문법 체크
+
+    func editResult(_ t: String) {
+        guard t != result else { return }
+        result = t
+        resultEdited = true
+        // 본문이 바뀌었으니 역번역·독음·지난 체크는 다시 받아야 한다
+        btText = nil; btOpen = false; btWarn = ""; btMarks = []
+        pronText = nil; pronOpen = false
+        checkText = nil
+    }
+
+    /// 고친 결과를 문법 체크 — 일본어는 일본어 문법 체크, 한국어는 맞춤법 검사 (기존 구조 그대로)
+    var canCheckEdited: Bool { resultEdited && (outLang == "ja" || outLang == "ko") && !result.trimmed.isEmpty }
+
+    func checkEdited() {
+        guard canCheckEdited, !checkLoading, needKey() else { return }
+        let text = result.trimmed
+        let prompt = outLang == "ja" ? TLExtras.grammarPrompt(text) : TLExtras.spellPrompt(text)
+        let model = store.effectiveModel, key = store.apiKey.trimmed
+        checkLoading = true
+        checkText = nil
+        Task { [weak self] in
+            do {
+                let out = try await Gemini.ask(model: model, key: key, prompt: prompt, maxTokens: 1024, temperature: 0.2)
+                guard let self, self.result.trimmed == text else { return }
+                withAnimation(.snappy(duration: 0.25)) { self.checkText = out.trimmed }
+                TLHaptic.done()
+            } catch {
+                self?.checkText = "오류: " + error.localizedDescription
+                TLHaptic.error()
+            }
+            self?.checkLoading = false
+        }
+    }
+
+    /// 문법 체크가 내놓은 "수정 표현"을 결과에 바로 넣는다. 문제없다고 했으면 nil.
+    var checkFix: String? {
+        guard let c = checkText, let m = c.rxFirst("수정 표현\\s*[:：]\\s*(.+)") else { return nil }
+        let fix = (c as NSString).substring(with: m.range(at: 1)).trimmed
+        if fix.isEmpty || fix.contains("✓") || fix.contains("자연스러운 표현") || fix == result.trimmed { return nil }
+        return fix
+    }
+
+    func applyCheckFix() {
+        guard let fix = checkFix else { return }
+        result = fix
+        checkText = nil
+        btText = nil; btOpen = false; btWarn = ""; btMarks = []
+        TLHaptic.select()
     }
 
     // MARK: 부분 바꾸기

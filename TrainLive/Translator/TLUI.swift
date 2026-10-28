@@ -40,6 +40,12 @@ struct TLFlow: Layout {
 }
 
 extension View {
+    /// 아래 탭 바가 글래스라 내용이 비쳐 흐려진다. 화면 아래 10% 에 색을 살짝 깔아 바를 또렷하게.
+    /// 색은 설정 → 색 → 하단 바 (기본: 번역기 아이콘의 붉은 색)
+    func tlBottomFade() -> some View {
+        overlay(alignment: .bottom) { TLBottomFade() }
+    }
+
     /// HTML 판의 흰 카드 (다크에선 #1C1C1E)
     func tlCard(_ radius: CGFloat = 14) -> some View {
         background(Color.tlCard, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
@@ -47,26 +53,26 @@ extension View {
 
     /// 강조색 글래스. iOS 26 이전엔 글래스가 색을 못 받아 흰 글씨가 묻히니 단색으로 칠한다.
     @ViewBuilder
-    func tlAccentGlass(cornerRadius: CGFloat? = nil) -> some View {
+    func tlAccentGlass(cornerRadius: CGFloat? = nil, color: Color = .tlAccent) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             if let r = cornerRadius {
-                self.glassEffect(.regular.tint(.tlAccent).interactive(), in: RoundedRectangle(cornerRadius: r, style: .continuous))
+                self.glassEffect(.regular.tint(color).interactive(), in: RoundedRectangle(cornerRadius: r, style: .continuous))
             } else {
-                self.glassEffect(.regular.tint(.tlAccent).interactive(), in: Capsule())
+                self.glassEffect(.regular.tint(color).interactive(), in: Capsule())
             }
         } else {
-            tlAccentSolid(cornerRadius)
+            tlAccentSolid(cornerRadius, color)
         }
         #else
-        tlAccentSolid(cornerRadius)
+        tlAccentSolid(cornerRadius, color)
         #endif
     }
 
     @ViewBuilder
-    private func tlAccentSolid(_ r: CGFloat?) -> some View {
-        if let r { self.background(Color.tlAccent, in: RoundedRectangle(cornerRadius: r, style: .continuous)) }
-        else { self.background(Color.tlAccent, in: Capsule()) }
+    private func tlAccentSolid(_ r: CGFloat?, _ color: Color) -> some View {
+        if let r { self.background(color, in: RoundedRectangle(cornerRadius: r, style: .continuous)) }
+        else { self.background(color, in: Capsule()) }
     }
 }
 
@@ -147,4 +153,83 @@ enum TLResultSize: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String { self == .sm ? "작게" : self == .md ? "보통" : "크게" }
     var points: CGFloat { self == .sm ? 15 : self == .md ? 17 : 20 }
+}
+
+// MARK: 색 설정
+
+extension Color {
+    /// "#RRGGBB" → 색. 못 읽으면 nil
+    init?(tlHex: String) {
+        var h = tlHex.trimmed
+        if h.hasPrefix("#") { h.removeFirst() }
+        guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+        self.init(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+    }
+}
+
+/// 설정에서 고르는 색 목록
+enum TLPalette {
+    /// 하단 바 깔개 — 첫 번째가 기본(번역기 아이콘의 붉은 색)
+    static let bar = ["#BC2448", "#E8789A", "#F08A24", "#3182F6", "#0E8A6F", "#7C5CE6", "#191F28"]
+    /// 번역 버튼 — 빈 값은 강조색(초록)
+    static let button = ["", "#BC2448", "#E8789A", "#F08A24", "#3182F6", "#7C5CE6", "#191F28"]
+    /// 쓰기(연필) 버튼 — 첫 번째가 기본(번역기 아이콘의 노란색)
+    static let write = ["#F2B84B", "#BC2448", "#E8789A", "#3182F6", "#0E8A6F", "#7C5CE6", "#191F28"]
+
+    @MainActor static var strength: Double { TLStore.shared.tintStrength }
+    /// 글래스에 칠할 색 — 진하기만큼 투명도를 준다
+    @MainActor static var buttonColor: Color {
+        (Color(tlHex: TLStore.shared.buttonTint) ?? .tlAccent).opacity(strength)
+    }
+    @MainActor static var writeColor: Color {
+        (Color(tlHex: TLStore.shared.writeTint) ?? Color(tlHex: TLStore.defaultWriteTint)!).opacity(strength)
+    }
+    @MainActor static var barColor: Color { Color(tlHex: TLStore.shared.barTint) ?? Color(tlHex: TLStore.defaultBarTint)! }
+
+    /// 버튼 위 글자 색. 색이 연하게 깔리면 바탕이 비쳐 보이니 그만큼 섞어서 밝기를 본다.
+    /// hex 가 비면 강조색(라이트 #0E8A6F · 다크 #3ECBA8).
+    static func ink(on hex: String, strength: Double = 1, dark: Bool = false) -> Color {
+        let h = hex.isEmpty ? (dark ? "#3ECBA8" : "#0E8A6F") : hex
+        guard let c = Color(tlHex: h), let comps = UIColor(c).cgColor.components, comps.count >= 3 else { return .white }
+        let lum = 0.299 * comps[0] + 0.587 * comps[1] + 0.114 * comps[2]
+        let behind: CGFloat = dark ? 0.12 : 0.97
+        let mixed = lum * CGFloat(strength) + behind * CGFloat(1 - strength)
+        return mixed > 0.62 ? Color(red: 0x19 / 255, green: 0x1F / 255, blue: 0x28 / 255) : .white
+    }
+}
+
+/// 화면 아래 10% 에 까는 색 그라데이션
+struct TLBottomFade: View {
+    @ObservedObject private var store = TLStore.shared
+
+    var body: some View {
+        LinearGradient(colors: [TLPalette.barColor.opacity(0), TLPalette.barColor.opacity(0.3 * TLPalette.strength)],
+                       startPoint: .top, endPoint: .bottom)
+            .frame(height: UIScreen.main.bounds.height * 0.1)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
+    }
+}
+
+/// 색 동그라미 줄 (설정)
+struct TLSwatchRow: View {
+    let colors: [String]
+    @Binding var selection: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(colors, id: \.self) { hex in
+                let on = selection == hex
+                Button { selection = hex; TLHaptic.select() } label: {
+                    Circle()
+                        .fill(Color(tlHex: hex) ?? Color.tlAccent)
+                        .frame(width: 26, height: 26)
+                        .overlay(Circle().stroke(Color.primary.opacity(on ? 0.85 : 0), lineWidth: 2).padding(-3.5))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(hex.isEmpty ? "기본" : hex)
+            }
+        }
+        .padding(.vertical, 4)
+    }
 }

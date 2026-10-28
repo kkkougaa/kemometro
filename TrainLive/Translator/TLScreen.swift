@@ -285,6 +285,17 @@ final class TLScreenModel: ObservableObject {
     @Published var lang: String { didSet { d.set(lang, forKey: "tl.screen_lang"); reconnect() } }
     @Published var showSrc: Bool { didSet { d.set(showSrc, forKey: "tl.screen_src"); redraw() } }
     @Published var fontScale: Double { didSet { d.set(fontScale, forKey: "tl.screen_fs"); redraw() } }
+    /// 자막 창 모양: 기본(4:3) · 가로로 길게(화면 위에 띠처럼)
+    @Published var wide: Bool { didSet { d.set(wide, forKey: "tl.screen_wide"); redraw() } }
+    /// 지금 말 위에 이전 대화를 몇 줄까지 남기나
+    @Published var history: Int { didSet { d.set(history, forKey: "tl.screen_hist"); redraw() } }
+    /// 자막 테마 — 글꼴(default·rounded·serif) · 띠 색 · 줄 간격
+    @Published var captionFont: String { didSet { d.set(captionFont, forKey: "tl.screen_font"); redraw() } }
+    @Published var captionBar: String { didSet { d.set(captionBar, forKey: "tl.screen_bar"); redraw() } }
+    @Published var captionSpacing: Double { didSet { d.set(captionSpacing, forKey: "tl.screen_spacing"); redraw() } }
+
+    /// PIP 에 넣는 그림 크기 (pt). 창 비율이 이걸 따라간다.
+    var canvas: CGSize { wide ? CGSize(width: 480, height: 150) : CGSize(width: 320, height: 240) }
 
     let pip = TLPiP()
     private let d = UserDefaults.standard
@@ -305,6 +316,11 @@ final class TLScreenModel: ObservableObject {
         lang = d.string(forKey: "tl.screen_lang") ?? "ja"
         showSrc = d.object(forKey: "tl.screen_src") as? Bool ?? true
         fontScale = d.object(forKey: "tl.screen_fs") as? Double ?? 1
+        wide = d.object(forKey: "tl.screen_wide") as? Bool ?? false
+        history = d.object(forKey: "tl.screen_hist") as? Int ?? 3
+        captionFont = d.string(forKey: "tl.screen_font") ?? "default"
+        captionBar = d.string(forKey: "tl.screen_bar") ?? "blue"
+        captionSpacing = d.object(forKey: "tl.screen_spacing") as? Double ?? 1
     }
 
     /// 화면에 처음 들어올 때 한 번. 소켓을 열어 두면 방송을 먼저 켜도 여기로 붙는다.
@@ -481,9 +497,9 @@ final class TLScreenModel: ObservableObject {
 
     // MARK: 그리기
 
-    /// 지금 PIP 에 보일 줄들: 끝난 줄 셋 + 말하는 중인 줄
+    /// 지금 PIP 에 보일 줄들: 이전 대화 몇 줄 + 말하는 중인 줄
     var captionLines: [TLCaptionLine] {
-        var out = lines.suffix(3).map { TLCaptionLine(src: $0.src, dst: $0.dst, temp: false, who: $0.who) }
+        var out = lines.suffix(max(0, history)).map { TLCaptionLine(src: $0.src, dst: $0.dst, temp: false, who: $0.who) }
         let s = (cur?.src ?? "") + pSrc, t = (cur?.dst ?? "") + pDst
         if !s.trimmed.isEmpty || !t.trimmed.isEmpty { out.append(TLCaptionLine(src: s, dst: t, temp: true, who: pWho)) }
         return out
@@ -503,9 +519,12 @@ final class TLScreenModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
             guard let self else { return }
             self.drawPending = false
+            let size = self.canvas
             let view = TLCaptionView(lines: self.captionLines, message: self.message,
-                                     showSrc: self.showSrc, scale: CGFloat(self.fontScale))
-                .frame(width: 320, height: 240)
+                                     showSrc: self.showSrc, scale: CGFloat(self.fontScale), wide: self.wide,
+                                     font: self.captionFont, barColor: TLCaptionView.barColor(self.captionBar),
+                                     spacing: CGFloat(self.captionSpacing))
+                .frame(width: size.width, height: size.height)
             let r = ImageRenderer(content: view)
             r.scale = 3
             if let cg = r.cgImage { self.pip.show(cg) }
@@ -530,11 +549,39 @@ struct TLCaptionView: View {
     let message: (text: String, error: Bool)?
     let showSrc: Bool
     let scale: CGFloat
+    var wide = false
+    var font = "default"
+    var barColor: Color = TLCaptionView.bar
+    var spacing: CGFloat = 1
+
+    /// 띠 색 고르기 — 이름 → 색 (TLBarChoice 는 아래)
+    static let barChoices: [TLBarChoice] = [
+        TLBarChoice(id: "blue", color: Color(red: 0x31 / 255, green: 0x82 / 255, blue: 0xF6 / 255)),
+        TLBarChoice(id: "green", color: Color(red: 0x0E / 255, green: 0x8A / 255, blue: 0x6F / 255)),
+        TLBarChoice(id: "pink", color: Color(red: 0xE8 / 255, green: 0x5D / 255, blue: 0x9A / 255)),
+        TLBarChoice(id: "orange", color: Color(red: 0xF0 / 255, green: 0x8A / 255, blue: 0x24 / 255)),
+        TLBarChoice(id: "purple", color: Color(red: 0x7C / 255, green: 0x5C / 255, blue: 0xE6 / 255)),
+        TLBarChoice(id: "black", color: Color(red: 0x19 / 255, green: 0x1f / 255, blue: 0x28 / 255))
+    ]
+    static func barColor(_ id: String) -> Color { barChoices.first { $0.id == id }?.color ?? bar }
+
+    private var design: Font.Design {
+        switch font {
+        case "rounded": return .rounded
+        case "serif": return .serif
+        default: return .default
+        }
+    }
+
+    /// 위 파란 띠 높이
+    private var barH: CGFloat { wide ? 20 : 24 }
+    /// PIP 창은 모서리가 둥글어서 오른쪽 위 끝에 두면 잘린다. 안쪽으로 들인다.
+    private var logoInset: CGFloat { wide ? 26 : 20 }
 
     var body: some View {
         ZStack(alignment: .top) {
             Color.white
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 7 * spacing) {
                 Spacer(minLength: 0)
                 if let m = message {
                     if !m.text.isEmpty {
@@ -548,26 +595,31 @@ struct TLCaptionView: View {
                     }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 34)
-            .padding(.bottom, 12)
+            .padding(.horizontal, wide ? 16 : 12)
+            .padding(.top, barH + 10)
+            .padding(.bottom, wide ? 10 : 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.11),
-                                         .init(color: .black, location: 0.27), .init(color: .black, location: 1)],
-                                 startPoint: .top, endPoint: .bottom))
+            .mask(GeometryReader { g in
+                let a = barH / max(1, g.size.height)
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: a),
+                                       .init(color: .black, location: min(0.6, a + (wide ? 0.2 : 0.16))),
+                                       .init(color: .black, location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+            })
             // 위의 파란 띠, 오른쪽에 앱 아이콘
             HStack {
                 Spacer()
                 Image("logo")
                     .resizable()
-                    .frame(width: 15, height: 15)
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Color.white.opacity(0.55), lineWidth: 1))
+                    .frame(width: barH - 9, height: barH - 9)
+                    .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous).stroke(Color.white.opacity(0.55), lineWidth: 1))
             }
-            .padding(.horizontal, 7)
-            .frame(height: 24)
-            .background(Self.bar)
+            .padding(.trailing, logoInset)
+            .frame(height: barH)
+            .background(barColor)
         }
+        .fontDesign(design)
         .environment(\.colorScheme, .light)
     }
 
@@ -578,17 +630,17 @@ struct TLCaptionView: View {
                 .fill(TLSpeaker.color(l.who))
                 .frame(width: 7, height: 7)
                 .padding(.top, (src ? 5 : 7) * scale)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 1 + 2 * (spacing - 1)) {
                 if src {
                     Text(l.src.trimmed)
-                        .font(.system(size: 11 * scale))
+                        .font(.system(size: 11 * scale, design: design))
                         .foregroundStyle(Self.ink.opacity(0.45))
                         .lineLimit(2)
                 }
                 Text(l.dst.trimmed.isEmpty ? "…" : l.dst.trimmed)
-                    .font(.system(size: 15 * scale, weight: .semibold))
+                    .font(.system(size: 15 * scale, weight: .semibold, design: design))
                     .foregroundStyle(l.temp ? Self.ink.opacity(0.45) : Self.ink)
-                    .lineSpacing(1)
+                    .lineSpacing(max(0, 1 + 4 * (spacing - 1)))
             }
         }
         .opacity(age == 0 ? 1 : age == 1 ? 0.72 : 0.5)
@@ -630,4 +682,9 @@ struct TLBroadcastPicker: UIViewRepresentable {
             b.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         }
     }
+}
+
+struct TLBarChoice: Identifiable {
+    let id: String
+    let color: Color
 }
