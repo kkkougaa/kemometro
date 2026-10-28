@@ -6,21 +6,6 @@ import UIKit
 // 키 이름은 translator.html 의 localStorage 키와 같게 맞춰서, 나중에 HTML 판 백업 파일을
 // 그대로 가져올 수 있게 한다 (gemini_api_key → tl.gemini_api_key).
 
-struct HistoryItem: Codable, Hashable, Identifiable {
-    var src: String
-    var tgt: String
-    var srcName: String
-    var tgtName: String
-    var ts: Double
-    var id: String { "\(ts)|\(src)" }
-}
-
-struct FbChip: Codable, Hashable, Identifiable {
-    var label: String
-    var prompt: String
-    var id: String { label + "|" + prompt }
-}
-
 @MainActor
 final class TLStore: ObservableObject {
     static let shared = TLStore()
@@ -28,14 +13,16 @@ final class TLStore: ObservableObject {
     private let d = UserDefaults.standard
     private func k(_ key: String) -> String { "tl." + key }
 
-    @Published var apiKey: String { didSet { d.set(apiKey.trimmed, forKey: k("gemini_api_key")) } }
-    @Published var model: String { didSet { d.set(model.trimmed, forKey: k("gemini_model")) } }
-    @Published var thinking: Bool { didSet { d.set(thinking, forKey: k("thinking")) } }
+    @Published var apiKey: String { didSet { d.set(apiKey.trimmed, forKey: k("gemini_api_key")); TLShare.publish() } }
+    @Published var model: String { didSet { d.set(model.trimmed, forKey: k("gemini_model")); TLShare.publish() } }
+    @Published var thinking: Bool { didSet { d.set(thinking, forKey: k("thinking")); TLShare.publish() } }
     @Published var priority: Bool { didSet { d.set(priority ? "1" : "0", forKey: k("gemini_priority")) } }
     @Published var autoDetect: Bool { didSet { d.set(autoDetect ? "1" : "0", forKey: k("auto_detect")) } }
     @Published var charName: String { didSet { d.set(charName, forKey: k("char_name")); _tones = nil } }
-    @Published var charPrompt: String { didSet { d.set(charPrompt, forKey: k("char_prompt_default")) } }
+    @Published var charPrompt: String { didSet { d.set(charPrompt, forKey: k("char_prompt_default")); TLShare.publish() } }
     @Published var sonioxKey: String { didSet { d.set(sonioxKey.trimmed, forKey: k("soniox_key")) } }
+    /// 말로 입력 엔진: device(기기 안) · soniox
+    @Published var dictationEngine: String { didSet { d.set(dictationEngine, forKey: k("dictation_engine")) } }
     @Published var ttsModel: String { didSet { d.set(ttsModel.trimmed, forKey: k("gemini_tts_model")) } }
     @Published var ttsVoice: String { didSet { d.set(ttsVoice, forKey: k("gemini_tts_voice")) } }
     @Published var ttsStyle: String { didSet { d.set(ttsStyle, forKey: k("gemini_tts_style")) } }
@@ -54,6 +41,7 @@ final class TLStore: ObservableObject {
         charName = d.string(forKey: "tl.char_name") ?? "코우가"
         charPrompt = d.string(forKey: "tl.char_prompt_default") ?? TLPrompt.kougaPrompt
         sonioxKey = d.string(forKey: "tl.soniox_key") ?? ""
+        dictationEngine = d.string(forKey: "tl.dictation_engine") ?? "device"
         ttsModel = d.string(forKey: "tl.gemini_tts_model") ?? ""
         ttsVoice = d.string(forKey: "tl.gemini_tts_voice") ?? "Kore"
         ttsStyle = d.string(forKey: "tl.gemini_tts_style") ?? "natural"
@@ -111,11 +99,13 @@ final class TLStore: ObservableObject {
         let s = Glossary.serialize(list)
         if s.isEmpty { d.removeObject(forKey: k("glossary_" + lang)) } else { d.set(s, forKey: k("glossary_" + lang)) }
         bump()
+        TLShare.publish()
     }
     func banned(_ lang: String) -> String { d.string(forKey: k("banned_" + lang)) ?? "" }
     func setBanned(_ s: String, lang: String) {
         if s.trimmed.isEmpty { d.removeObject(forKey: k("banned_" + lang)) } else { d.set(s, forKey: k("banned_" + lang)) }
         bump()
+        TLShare.publish()
     }
     func glossarySkip(_ lang: String) -> [String] {
         Self.decode([String].self, d.string(forKey: k("glossary_skip_" + lang))?.data(using: .utf8)) ?? []

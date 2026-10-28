@@ -5,7 +5,7 @@ import UIKit
 // 번역기 메인 화면. translator.html 의 배치를 그대로 옮겼다:
 // 헤더 → 언어 바 → 입력 카드 → 번역 옵션 → 결과 → 피드백. 메뉴는 왼쪽 서랍.
 
-enum TLRoute: Hashable { case history, glossary, settings, tones, chips, study, words, talk }
+enum TLRoute: Hashable { case history, glossary, settings, tones, chips, study, words, talk, screen }
 
 struct TranslatorView: View {
     @StateObject private var m = TranslatorModel()
@@ -20,6 +20,7 @@ struct TranslatorView: View {
     @Namespace private var pillNS
     @ObservedObject private var audio = TLAudio.shared
     @ObservedObject private var dictation = TLDictation.shared
+    @ObservedObject private var deviceDictation = TLDeviceDictation.shared
     @State private var dictTarget: TLDictTarget?
     @State private var showBig = false
     @State private var showImgSource = false
@@ -31,6 +32,8 @@ struct TranslatorView: View {
 
     private var resultFont: CGFloat { (TLResultSize(rawValue: rsize) ?? .md).points }
     private var canTranslate: Bool { !m.input.trimmed.isEmpty || m.attached != nil }
+    /// 말로 입력 엔진 — 설정에서 고른다. Soniox 를 골랐는데 키가 없으면 기기 안으로
+    private var useDevice: Bool { store.dictationEngine != "soniox" || !dictation.available }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -83,6 +86,7 @@ struct TranslatorView: View {
             }
             .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
             .onChange(of: dictation.error) { _, e in if let e { m.show(e) } }
+            .onChange(of: deviceDictation.error) { _, e in if let e { m.show(e) } }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 Task {
@@ -104,6 +108,7 @@ struct TranslatorView: View {
                 case .study: TLStudyPage(tgtLang: m.tgtLang)
                 case .words: TLWordsPage()
                 case .talk: TLTalkPage(otherLang: m.tgtLang)
+                case .screen: TLScreenPage()
                 }
             }
         }
@@ -111,6 +116,7 @@ struct TranslatorView: View {
             TLDrawer(open: $drawerOpen) { route in path = [route] }
         }
         .tint(.tlAccent)
+        .task { TLShare.publish() }
     }
 
     // MARK: 헤더
@@ -241,18 +247,24 @@ struct TranslatorView: View {
                 .buttonStyle(.plain)
                 .tapHaptic()
                 .accessibilityLabel("사진")
-                if dictation.available {
+                if useDevice || dictation.available {
+                    let on = useDevice ? deviceDictation.active : dictation.active
                     Button {
-                        TLDictation.shared.toggle(lang: m.srcLang == "ko" ? "ko" : m.tgtLang,
-                                                  glossaryLang: m.tgtLang, base: m.input,
-                                                  onText: { m.input = $0 }, onDone: nil)
+                        let lang = m.srcLang == "ko" ? "ko" : m.tgtLang
+                        if useDevice {
+                            deviceDictation.toggle(lang: lang, glossaryLang: m.tgtLang, base: m.input,
+                                                   onText: { m.input = $0 }, onDone: nil)
+                        } else {
+                            dictation.toggle(lang: lang, glossaryLang: m.tgtLang, base: m.input,
+                                             onText: { m.input = $0 }, onDone: nil)
+                        }
                     } label: {
-                        Image(systemName: dictation.active ? "mic.fill" : "mic")
+                        Image(systemName: on ? "mic.fill" : "mic")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(dictation.active ? Color.tlAccent : Color.tlText2)
+                            .foregroundStyle(on ? Color.tlAccent : Color.tlText2)
                             .frame(minWidth: 36, minHeight: 36)
                             .contentShape(Rectangle())
-                            .symbolEffect(.pulse, isActive: dictation.active)
+                            .symbolEffect(.pulse, isActive: on)
                     }
                     .buttonStyle(.plain)
                     .tapHaptic()
@@ -502,6 +514,13 @@ struct TranslatorView: View {
                     .padding(.vertical, 14)
             } else if m.mode == .image, let img = m.overlayImage, !m.overlay.isEmpty, m.fbMessages.isEmpty {
                 overlayResult(img)
+            } else if !m.result.isEmpty && m.pronOpen && m.outLang == "ja" {
+                // 독음을 켜면 한자 위에 후리가나. 복사에는 안 들어간다.
+                TLRubyText(text: m.result, fontSize: resultFont)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10 + resultFont * 0.45)
+                    .padding(.bottom, 12)
             } else if !m.result.isEmpty {
                 TLSelectableText(text: m.result, fontSize: resultFont, lineSpacing: resultFont * 0.42) { kind, text, range in
                     dictTarget = TLDictTarget(text: text, range: range, mode: kind)

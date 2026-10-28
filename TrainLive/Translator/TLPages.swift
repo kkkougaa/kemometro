@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // 서랍과 서랍에서 여는 페이지들 (기록 · 용어집 · 설정 · 말투 관리 · 피드백 칩)
 
@@ -69,6 +70,7 @@ struct TLDrawer: View {
             }
             .padding(.bottom, 14)
 
+            item("pip", "화면 소리 번역") { pick(.screen) }
             item("checkmark.circle", "공부") { pick(.study) }
             item("note.text", "표현 노트") { pick(.words) }
             item("character.book.closed", "용어집") { pick(.glossary) }
@@ -314,6 +316,39 @@ struct TLSettingsPage: View {
     @State private var keyVisible = false
     @ObservedObject private var audio = TLAudio.shared
     @State private var previewLoading = false
+    @State private var iconName: String? = UIApplication.shared.alternateIconName
+
+    /// 앱 아이콘은 빌드할 때 넣어 둔 것 중에서만 고를 수 있다 (iOS 제약)
+    private func iconTile(_ id: String?, image: String, name: String) -> some View {
+        let on = iconName == id
+        return Button {
+            guard UIApplication.shared.supportsAlternateIcons, !on else { return }
+            Task {
+                do {
+                    try await UIApplication.shared.setAlternateIconName(id)
+                    iconName = UIApplication.shared.alternateIconName
+                    TLHaptic.select()
+                } catch {
+                    TLHaptic.error()
+                }
+            }
+        } label: {
+            VStack(spacing: 7) {
+                Image(image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 62, height: 62)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(on ? Color.tlAccent : Color.clear, lineWidth: 2.5).padding(-3.5))
+                Text(name)
+                    .font(.system(size: 12, weight: on ? .semibold : .regular))
+                    .foregroundStyle(on ? Color.primary : Color.tlText2)
+            }
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+    }
 
     /// 고른 목소리·스타일로 짧은 문장을 들려준다
     private func previewVoice() {
@@ -385,6 +420,14 @@ struct TLSettingsPage: View {
                     .disabled(store.charPrompt == TLPrompt.kougaPrompt)
             }
 
+            Section("앱 아이콘") {
+                HStack(spacing: 22) {
+                    iconTile(nil, image: "logo", name: "kemometro")
+                    iconTile("AppIcon-Translator", image: "kouga", name: "번역기")
+                    Spacer()
+                }
+            }
+
             Section("음성") {
                 LabeledContent("TTS 모델") {
                     TextField(TLStore.defaultTTSModel, text: $store.ttsModel)
@@ -421,6 +464,14 @@ struct TLSettingsPage: View {
                 Picker("이미지 번역 출력 크기", selection: $store.imageSize) {
                     ForEach(TLStore.imageSizesAccepted, id: \.self) { Text($0).tag($0) }
                 }
+            }
+
+            Section("말로 입력") {
+                Picker("받아쓰기", selection: $store.dictationEngine) {
+                    Text("기기 안").tag("device")
+                    Text("Soniox").tag("soniox")
+                }
+                .pickerStyle(.segmented)
             }
 
             Section("Soniox API 키") {

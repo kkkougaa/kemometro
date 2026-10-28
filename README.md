@@ -28,6 +28,8 @@ TrainLive/Translator/       번역기(translator.html 을 SwiftUI 로 옮긴 것
   Gemini                    스트리밍(SSE)·우선 처리(Interactions API)·재시도
   TLStore                   설정·기록. UserDefaults 'tl.' + HTML 의 localStorage 키 이름
   TranslatorModel / View    번역 흐름과 메인 화면, TLPages 는 서랍·기록·용어집·설정
+TrainLiveBroadcast/         화면 기록(방송) 확장. 다른 앱 소리를 16kHz 모노로 바꿔 127.0.0.1:48231 로 본 앱에 넘긴다
+                            (본 앱 TLScreen 이 Soniox 로 번역해 PIP 자막으로 띄운다. 시안 preview/pip.html B)
 TrainLiveWidget/            위젯 익스텐션: 잠금화면 배너 + 다이내믹 아일랜드(확장·컴팩트·미니멀)
 preview/index.html          동작 흐름 HTML 목업(지오펜스 → 등장 → 갱신 → 소멸). 디자인 규격의 기준
 .github/workflows/build.yml 무서명 ipa 빌드 + 시뮬레이터 스크린샷·영상

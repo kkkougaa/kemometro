@@ -33,6 +33,15 @@ targets:
       - target: TrainLiveWidget
         embed: true
         codeSign: false
+      - target: TrainLiveBroadcast
+        embed: true
+        codeSign: false
+      - target: TrainLiveAction
+        embed: true
+        codeSign: false
+      - target: TrainLiveTranslate
+        embed: true
+        codeSign: false
     info:
       path: TrainLive/Info.plist
       properties:
@@ -41,10 +50,14 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIBackgroundModes: [location]
+        # audio: 화면 소리 번역 PIP 가 떠 있는 동안 앱이 계속 돌아야 한다
+        UIBackgroundModes: [location, audio]
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
+        # 기본 번역 앱 확장이 Gemini 를 부른다
+        com.apple.developer.translation-ui-provider.network-access: true
         NSMicrophoneUsageDescription: 대화 모드와 말로 입력에서 목소리를 받아 적습니다.
+        NSSpeechRecognitionUsageDescription: 말로 입력을 기기 안에서 받아 적습니다.
         NSCameraUsageDescription: 사진을 찍어 그 안의 글을 번역합니다.
         NSPhotoLibraryAddUsageDescription: 번역한 이미지를 사진 앱에 저장합니다.
         NSLocationWhenInUseUsageDescription: 역에 가까워졌는지 알기 위해 위치를 씁니다.
@@ -65,6 +78,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive
         PRODUCT_NAME: TrainLive
+        # 설정 → 앱 아이콘에서 고르는 대체 아이콘(AppIcon-Translator)도 같이 묶는다
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: "YES"
+        # 무서명 빌드라 여기선 안 박힌다. CI 가 따로 ad-hoc 서명으로 박은 ipa 를 하나 더 만든다.
+        CODE_SIGN_ENTITLEMENTS: TrainLive/TrainLive.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: kemometro
         SWIFT_EMIT_LOC_STRINGS: "NO"
 
@@ -89,12 +106,101 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: "YES"
         SKIP_INSTALL: "YES"
 
+  # 화면 기록(방송) 확장 — 다른 앱 소리를 받아 본 앱으로 넘긴다
+  TrainLiveBroadcast:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TrainLiveBroadcast
+    info:
+      path: TrainLiveBroadcast/Info.plist
+      properties:
+        CFBundleDisplayName: kemometro
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive.broadcast
+        PRODUCT_NAME: TrainLiveBroadcast
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
+
+  # 공유 시트 → "코우가 번역" 액션 확장. 앱을 열지 않고 카드로 번역을 띄운다
+  TrainLiveAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TrainLiveAction
+      - path: TrainLive/Translator/TLText.swift
+      - path: TrainLive/Translator/TLPrompt.swift
+      - path: TrainLive/Translator/Gemini.swift
+      - path: Shared/Glass.swift
+      - path: Shared/Haptics.swift
+    info:
+      path: TrainLiveAction/Info.plist
+      properties:
+        CFBundleDisplayName: 코우가 번역
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ui-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ActionViewController
+          NSExtensionActionWantsFullScreenPresentation: true
+          NSExtensionAttributes:
+            NSExtensionServiceRoleType: NSExtensionServiceRoleTypeEditor
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive.action
+        PRODUCT_NAME: TrainLiveAction
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
+
+  # 기본 번역 앱 확장 (iOS 18.4+) — 글을 고르고 '번역'을 누르면 시스템 시트 안에 우리 카드
+  TrainLiveTranslate:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.4"
+    sources:
+      - path: TrainLiveTranslate
+      - path: TrainLiveAction/TLActionView.swift
+      - path: TrainLiveAction/TLActionStore.swift
+      - path: TrainLiveAction/Assets.xcassets
+      - path: TrainLive/Translator/TLText.swift
+      - path: TrainLive/Translator/TLPrompt.swift
+      - path: TrainLive/Translator/Gemini.swift
+      - path: Shared/Glass.swift
+      - path: Shared/Haptics.swift
+    info:
+      path: TrainLiveTranslate/Info.plist
+      properties:
+        CFBundleDisplayName: 코우가 번역
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        com.apple.developer.translation-ui-provider.network-access: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.public.translation-ui-provider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive.translate
+        PRODUCT_NAME: TrainLiveTranslate
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
+
 schemes:
   TrainLive:
     build:
       targets:
         TrainLive: all
         TrainLiveWidget: all
+        TrainLiveBroadcast: all
+        TrainLiveAction: all
+        TrainLiveTranslate: all
     run:
       config: Debug
     archive:

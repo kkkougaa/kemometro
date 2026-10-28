@@ -114,6 +114,7 @@ final class TranslatorModel: ObservableObject {
         langLocked = true
         if srcLang != "ko" { srcLang = lang }
         tgtLang = lang; userTgt = lang
+        TLShare.setLastTarget(lang)
         if !toneAvailable(tone) { tone = "none" }
         clearResult()
     }
@@ -174,6 +175,7 @@ final class TranslatorModel: ObservableObject {
     }
 
     func cancel() {
+        if busy { TLHaptic.cancel() }
         reqSeq += 1
         task?.cancel(); task = nil
         busy = false; streaming = false
@@ -245,6 +247,7 @@ final class TranslatorModel: ObservableObject {
 
         let draw: @MainActor (String) -> Void = { [weak self] full in
             guard let self, my == self.reqSeq else { return }
+            if !self.streaming { TLHaptic.tick() }
             self.streaming = true
             self.result = TLText.splitComment(full).body.trimmedStart
             self.comment = ""
@@ -306,15 +309,17 @@ final class TranslatorModel: ObservableObject {
                 self.comment = (split.comment ?? "").trimmed
                 self.fbMessages = []
                 self.succeeded = true
-                Haptics.light()
+                TLHaptic.done()
                 // 역번역은 접어두지 않고 번역 직후 바로 가져와 펼친다
                 if sLang == "ko" { self.toggleBackTranslation() }
             } catch is CancellationError {
             } catch {
                 guard my == self.reqSeq else { return }
                 self.error = "오류: " + error.localizedDescription
+                TLHaptic.error()
             }
         }
+        TLHaptic.start()
     }
 
     // MARK: 피드백
@@ -364,10 +369,11 @@ final class TranslatorModel: ObservableObject {
                 self.result = reply
                 self.comment = ""
                 self.fbMessages.append(FbMsg(role: "ai", text: reply))
-                Haptics.light()
+                TLHaptic.done()
             } catch is CancellationError {
             } catch {
                 self.fbMessages.append(FbMsg(role: "ai", text: "오류: " + error.localizedDescription))
+                TLHaptic.error()
             }
         }
     }
@@ -385,7 +391,7 @@ final class TranslatorModel: ObservableObject {
         if !list.contains(where: { $0.from == s.x }) { list.append(GlossaryPair(from: s.x, to: s.k)) }
         store.setGlossary(list, lang: tgtLang)
         show("용어집에 넣었어요")
-        Haptics.light()
+        TLHaptic.select()
     }
 
     func dismissSuggestion(_ s: Glossary.Suggestion) {
@@ -397,21 +403,21 @@ final class TranslatorModel: ObservableObject {
     func copyResult() {
         guard !result.isEmpty else { return }
         UIPasteboard.general.string = TLText.cleanForCopy(result)
-        show("복사했어요"); Haptics.light()
+        show("복사했어요"); TLHaptic.copy()
     }
 
     func copyBoth() {
         guard !result.isEmpty else { return }
         let orig = TLText.cleanForCopy(input)
         UIPasteboard.general.string = [orig, TLText.cleanForCopy(result)].filter { !$0.isEmpty }.joined(separator: "\n\n")
-        show("복사했어요"); Haptics.light()
+        show("복사했어요"); TLHaptic.copy()
     }
 
     /// 클립보드에 사진이 있으면 사진을, 아니면 글을 붙인다
     func paste() {
         let pb = UIPasteboard.general
-        if pb.hasImages, let im = pb.image { attach(im); Haptics.light(); return }
-        if let s = pb.string, !s.isEmpty { input = String(s.prefix(2000)); Haptics.light() }
+        if pb.hasImages, let im = pb.image { attach(im); TLHaptic.copy(); return }
+        if let s = pb.string, !s.isEmpty { input = String(s.prefix(2000)); TLHaptic.copy() }
     }
 
     func loadHistory(_ h: HistoryItem) {

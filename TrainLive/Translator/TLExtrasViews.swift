@@ -160,17 +160,16 @@ struct TLDictSheet: View {
 
     private func loadMeaning() {
         guard meaning.isEmpty, !loading else { return }
-        let store = TLStore.shared
-        guard store.hasKey else { meaning = "API 키를 설정해주세요."; return }
         loading = true
         let prompt = TLExtras.dictPrompt(word: target.text, langName: m.outName)
         Task {
             do {
-                let out = try await Gemini.ask(model: store.effectiveModel, key: store.apiKey.trimmed, prompt: prompt, maxTokens: 512)
+                // 기기 안 AI 먼저, 못 쓰면 Gemini
+                let out = try await TLLocal.askLocalFirst(prompt, maxTokens: 512)
                 let p = TLExtras.parseDict(out)
                 reading = p.reading
                 meaning = p.meaning
-                Haptics.light()
+                TLHaptic.tick()
             } catch {
                 meaning = error.localizedDescription
             }
@@ -246,7 +245,7 @@ struct TLOverlayView: View {
             .position(x: x + w / 2, y: y + h / 2)
             .onTapGesture {
                 if src { showingSrc.remove(it.id) } else { showingSrc.insert(it.id) }
-                Haptics.light()
+                TLHaptic.select()
             }
     }
 }
@@ -338,5 +337,34 @@ struct TLCameraPicker: UIViewControllerRepresentable {
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
+    }
+}
+
+// MARK: 후리가나 결과 (독음을 켰을 때)
+
+/// 한자 위에 읽기를 작게 단다. 루비는 UILabel 에서만 그려져서 이때는 글 고르기 메뉴를 쉰다.
+struct TLRubyText: UIViewRepresentable {
+    let text: String
+    let fontSize: CGFloat
+
+    func makeUIView(context: Context) -> UILabel {
+        let l = UILabel()
+        l.numberOfLines = 0
+        l.lineBreakMode = .byWordWrapping
+        l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return l
+    }
+
+    func updateUIView(_ l: UILabel, context: Context) {
+        // 루비가 윗줄과 안 겹치게 줄 간격을 넉넉히
+        l.attributedText = TLLocal.rubyAttributed(text, font: .systemFont(ofSize: fontSize), color: .label,
+                                                  lineSpacing: fontSize * 0.75)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
+        let w = proposal.width ?? UIScreen.main.bounds.width - 64
+        uiView.preferredMaxLayoutWidth = w
+        let fit = uiView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude))
+        return CGSize(width: w, height: ceil(fit.height))
     }
 }

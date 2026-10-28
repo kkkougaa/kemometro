@@ -39,6 +39,7 @@ extension TranslatorModel {
                 text = bt
                 let d = TLExtras.divergence(source: origin, bt: bt)
                 warn = d.message; marks = d.marks
+                if !warn.isEmpty { TLHaptic.warn() }
             }
             guard let self else { return }
             self.btLoading = false
@@ -62,13 +63,21 @@ extension TranslatorModel {
             withAnimation(.snappy(duration: 0.22)) { pronOpen = true }
             return
         }
-        guard needKey() else { return }
+        if outLang == "ja" {
+            // 일본어는 iOS 형태소 분석기로 기기 안에서 바로 읽는다
+            let out = TLLocal.japaneseReading(src)
+            pronCache[key] = out
+            pronText = out
+            withAnimation(.snappy(duration: 0.22)) { pronOpen = true }
+            TLHaptic.tick()
+            return
+        }
+        guard TLLocal.aiAvailable || needKey() else { return }
         pronLoading = true
         let prompt = TLExtras.pronPrompt(tgtName: outName, text: src)
-        let model = store.effectiveModel, apiKey = store.apiKey.trimmed
         Task { [weak self] in
             var out = "독음을 가져오지 못했어요."
-            if let r = try? await Gemini.ask(model: model, key: apiKey, prompt: prompt, maxTokens: 2048), !r.trimmed.isEmpty {
+            if let r = try? await TLLocal.askLocalFirst(prompt, maxTokens: 2048), !r.trimmed.isEmpty {
                 out = r.trimmed
                 guard let self else { return }
                 if self.pronCache.count >= 40 { self.pronCache.removeAll() }
@@ -150,7 +159,7 @@ extension TranslatorModel {
                     ]
                     self.succeeded = true
                 }
-                Haptics.light()
+                TLHaptic.done()
             } catch is CancellationError {
             } catch {
                 guard let self, my == self.reqSeq else { return }
@@ -193,12 +202,36 @@ extension TranslatorModel {
         ]
         let body: [String: Any] = ["contents": [["parts": parts]], "generationConfig": gen]
         let model = store.effectiveModel, key = store.apiKey.trimmed
+        let tgtName = outName
+        let glossaryText = Glossary.instr(Glossary.serialize(store.glossary(tgtLang)), pairs: store.glossary(tgtLang), toKO: toKO)
         task = Task { [weak self] in
             do {
-                let obj = try await Gemini.generate(model: model, key: key, body: body, timeout: thinking ? 120 : 60)
+                var items: [OverlayItem] = []
+                // ① 기기 안 글자 인식 → 글만 번역
+                let ocr = await TLLocal.recognize(image)
+                if !ocr.isEmpty {
+                    var g: [String: Any] = ["temperature": 0.2, "maxOutputTokens": 4096, "responseMimeType": "application/json",
+                                            "responseSchema": ["type": "ARRAY", "items": ["type": "STRING"]] as [String: Any]]
+                    if !thinking { g["thinkingConfig"] = ["thinkingBudget": 0] }
+                    let prompt = TLLocal.overlayTranslatePrompt(ocr.map(\.text), tgtName: tgtName, glossary: glossaryText)
+                    let tb: [String: Any] = ["contents": [["parts": [["text": prompt]]]], "generationConfig": g]
+                    if let obj = try? await Gemini.generate(model: model, key: key, body: tb, timeout: thinking ? 90 : 40),
+                       let data = Gemini.parts(obj).compactMap({ $0["text"] as? String }).joined().data(using: .utf8),
+                       let arr = try? JSONSerialization.jsonObject(with: data) as? [String], arr.count == ocr.count {
+                        items = zip(ocr, arr).compactMap { o, t in
+                            let dst = t.trimmed
+                            return dst.isEmpty ? nil : OverlayItem(box: o.box, src: o.text, dst: dst)
+                        }
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                // ② 글자를 못 찾았거나 번역이 어긋나면 사진째 보내 위치까지 받는다
+                if items.isEmpty {
+                    let obj = try await Gemini.generate(model: model, key: key, body: body, timeout: thinking ? 120 : 60)
+                    let raw = Gemini.parts(obj).compactMap { $0["text"] as? String }.joined()
+                    items = TLExtras.parseOverlay(raw)
+                }
                 guard let self, my == self.reqSeq else { return }
-                let raw = Gemini.parts(obj).compactMap { $0["text"] as? String }.joined()
-                let items = TLExtras.parseOverlay(raw)
                 if items.isEmpty { throw GeminiError(message: "이미지에서 글자를 찾지 못했어요.") }
                 self.overlayImage = image
                 self.overlay = items
@@ -209,11 +242,12 @@ extension TranslatorModel {
                     ["role": "model", "parts": [["text": "네, 번역 결과를 기억했습니다. 수정 요청을 말씀해주세요."]]]
                 ]
                 self.succeeded = true
-                Haptics.light()
+                TLHaptic.done()
             } catch is CancellationError {
             } catch {
                 guard let self, my == self.reqSeq else { return }
                 self.error = "오류: " + error.localizedDescription
+                TLHaptic.error()
             }
             if let self, my == self.reqSeq { self.busy = false }
         }
@@ -239,7 +273,7 @@ extension TranslatorModel {
                     throw GeminiError(message: "이미지를 만들지 못했어요.")
                 }
                 withAnimation(.snappy(duration: 0.3)) { self.madeImage = im }
-                Haptics.light()
+                TLHaptic.done()
             } catch is CancellationError {
             } catch {
                 if !Task.isCancelled { self?.error = "오류: " + error.localizedDescription }
@@ -252,7 +286,7 @@ extension TranslatorModel {
         guard let im = madeImage else { return }
         UIImageWriteToSavedPhotosAlbum(im, nil, nil, nil)
         show("사진에 저장했어요")
-        Haptics.light()
+        TLHaptic.copy()
     }
 
     // MARK: 부분 바꾸기
@@ -269,7 +303,7 @@ extension TranslatorModel {
         // 본문이 바뀌었으니 역번역·독음은 다시 받아야 한다
         btText = nil; btOpen = false; btWarn = ""; btMarks = []
         pronText = nil; pronOpen = false
-        Haptics.light()
+        TLHaptic.done()
         return true
     }
 }

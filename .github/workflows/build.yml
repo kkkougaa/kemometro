@@ -67,6 +67,16 @@ jobs:
           ls -la Payload/*.app/PlugIns || true
           VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "Payload/$(basename "$APP")/Info.plist" || echo dev)
           zip -qr "TrainLive-${VERSION}-unsigned.ipa" Payload
+          # 기본 번역 앱 권한(com.apple.developer.translation-app)을 박은 ipa 도 따로 만든다.
+          # 서명 단계에서 이 권한이 거부돼 설치가 막히면 위의 보통 ipa 를 쓴다.
+          shopt -s nullglob
+          if (for x in Payload/*.app/PlugIns/*.appex Payload/*.app/Extensions/*.appex; do codesign --force --sign - "$x" || exit 1; done) \
+             && codesign --force --sign - --entitlements TrainLive/TrainLive.entitlements Payload/*.app; then
+            codesign -d --entitlements - Payload/*.app || true
+            zip -qr "TrainLive-${VERSION}-translate-unsigned.ipa" Payload
+          else
+            echo "::warning::기본 번역 권한 ipa 를 못 만들었어 (보통 ipa 만 올린다)"
+          fi
           ls -la *.ipa
 
       - name: ipa 올리기

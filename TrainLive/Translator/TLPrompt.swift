@@ -50,6 +50,22 @@ enum TLLang {
     static func cfg(_ lang: String) -> LangConfig { config[lang] ?? config["ja"]! }
 }
 
+// 기록·칩은 공유 확장에서도 쓴다 (TLStore 없이)
+struct HistoryItem: Codable, Hashable, Identifiable {
+    var src: String
+    var tgt: String
+    var srcName: String
+    var tgtName: String
+    var ts: Double
+    var id: String { "\(ts)|\(src)" }
+}
+
+struct FbChip: Codable, Hashable, Identifiable {
+    var label: String
+    var prompt: String
+    var id: String { label + "|" + prompt }
+}
+
 struct Tone: Codable, Hashable, Identifiable {
     var id: String
     var name: String

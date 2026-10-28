@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>화면 소리 번역 · PIP 시안</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --ground: #f2f4f6; --text: #191f28; --sub: #4e5968; --dim: #8b95a1; --blue: #3182f6;
+    --accent: #0E8A6F; --accent-bg: rgba(14,138,111,.10);
+    --ease: cubic-bezier(.2, .8, .2, 1); --spring: cubic-bezier(.3, 1.15, .4, 1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--text); font-family: "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", sans-serif; font-size: 15px; line-height: 1.5; letter-spacing: -.01em; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -.035em; margin: 0 0 6px; }
+  .lede { color: var(--sub); margin: 0 0 26px; font-size: 14.5px; }
+  .cols { display: grid; grid-template-columns: 380px 1fr; gap: 36px; align-items: start; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } .phone { margin: 0 auto; } }
+  .tabs { display: flex; gap: 8px; margin: 0 0 18px; flex-wrap: wrap; }
+  .tabs button, .ctl button { border: 0; font-family: inherit; font-size: 13.5px; font-weight: 700; padding: 9px 15px; border-radius: 999px; background: #fff; color: var(--sub); cursor: pointer; box-shadow: 0 1px 3px rgba(25,31,40,.06); }
+  .tabs button.on { background: var(--blue); color: #fff; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 0; max-width: 380px; }
+  .ctl .lab { width: 100%; font-size: 12px; font-weight: 700; color: var(--dim); margin: 8px 0 0; }
+  .ctl button { font-size: 12.5px; padding: 7px 12px; }
+  .ctl button.on { background: var(--text); color: #fff; }
+  .notes { background: #fff; border-radius: 22px; padding: 22px 24px; box-shadow: 0 1px 3px rgba(25,31,40,.04), 0 8px 24px rgba(25,31,40,.06); margin-bottom: 16px; }
+  .notes h2 { font-size: 16px; font-weight: 700; margin: 0 0 12px; letter-spacing: -.03em; }
+  .notes ol, .notes ul { margin: 0; padding-left: 20px; color: var(--sub); font-size: 13.5px; }
+  .notes li { margin: 0 0 8px; }
+  .notes b { color: var(--text); }
+
+  /* 폰 */
+  .phone { width: 360px; height: 740px; border-radius: 52px; background: #0f0f0f; box-shadow: 0 0 0 9px #1c1c1e, 0 0 0 10px #3a3a3c, 0 30px 60px rgba(0,0,0,.35); position: relative; overflow: hidden; color: #fff; user-select: none; }
+  .phone.light-app { background: #f2f2f7; color: #000; }
+  .isl { position: absolute; left: 50%; top: 10px; width: 108px; height: 30px; border-radius: 20px; background: #000; transform: translateX(-50%); z-index: 30; }
+  .sb { position: absolute; top: 14px; left: 30px; right: 30px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; z-index: 29; }
+  .sb .rec { background: #ff3b30; color: #fff; border-radius: 8px; padding: 0 7px; font-size: 13px; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 130px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.55); transform: translateX(-50%); z-index: 30; }
+  .phone.light-app .home { background: rgba(0,0,0,.35); }
+
+  /* 가짜 동영상 앱 */
+  .vid { position: absolute; inset: 0; padding-top: 50px; }
+  .vid .player { height: 203px; position: relative; overflow: hidden;
+    background: radial-gradient(120% 90% at 30% 80%, #f7a26a 0%, #c75b6e 38%, #3c2a5c 72%, #141428 100%); }
+  .vid .player::before { content: ""; position: absolute; left: -10%; right: -10%; bottom: 0; height: 46%;
+    background: repeating-linear-gradient(90deg, #1b1830 0 22px, #232040 22px 30px, #15132a 30px 52px); clip-path: polygon(0 40%, 8% 20%, 15% 45%, 24% 10%, 33% 38%, 41% 0, 52% 30%, 61% 12%, 72% 42%, 80% 18%, 90% 36%, 100% 8%, 100% 100%, 0 100%); }
+  .vid .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.25); }
+  .vid .bar i { display: block; height: 100%; width: 34%; background: #ff3b30; }
+  .vid .meta { padding: 12px 14px 8px; }
+  .vid .t { font-size: 15.5px; font-weight: 700; line-height: 1.35; }
+  .vid .s { font-size: 12px; color: rgba(255,255,255,.55); margin-top: 4px; }
+  .vid .chips { display: flex; gap: 6px; padding: 6px 14px 12px; }
+  .vid .chips span { background: rgba(255,255,255,.1); border-radius: 16px; padding: 5px 12px; font-size: 12px; }
+  .vid .rel { display: flex; gap: 10px; padding: 8px 14px; }
+  .vid .rel .th { width: 128px; height: 72px; border-radius: 8px; flex: none; }
+  .vid .rel .lines { flex: 1; }
+  .vid .rel .lines i { display: block; height: 10px; border-radius: 4px; background: rgba(255,255,255,.14); margin: 4px 0 8px; }
+  .vid .rel .lines i:nth-child(2) { width: 70%; }
+  .vid .rel .lines i:nth-child(3) { width: 45%; background: rgba(255,255,255,.08); }
+
+  /* PIP 창 */
+  .pip { position: absolute; z-index: 25; border-radius: 13px; overflow: hidden; background: #111214;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 0 .5px rgba(255,255,255,.12);
+    transition: left .45s var(--spring), top .45s var(--spring), width .35s var(--ease), height .35s var(--ease), transform .35s var(--ease); cursor: grab; touch-action: none; }
+  .pip.drag { transition: none; cursor: grabbing; }
+  .pip.stash { transform: translateX(calc(100% - 22px)); }
+  .pip.stash.left { transform: translateX(calc(-100% + 22px)); }
+  .pip .tab { position: absolute; top: 0; bottom: 0; width: 22px; display: none; align-items: center; justify-content: center; background: rgba(40,40,44,.9); z-index: 3; }
+  .pip.stash .tab { display: flex; left: 0; }
+  .pip.stash.left .tab { left: auto; right: 0; }
+  .pip .tab::after { content: ""; width: 7px; height: 7px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); margin-left: 4px; }
+  .pip.stash.left .tab::after { transform: rotate(-135deg); margin: 0 4px 0 0; }
+
+  .pip .sys { position: absolute; inset: 0; background: rgba(0,0,0,.42); display: flex; justify-content: space-between; align-items: flex-start; padding: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 2; }
+  .pip.sysOn .sys { opacity: 1; }
+  .pip .sys .g { display: flex; gap: 6px; }
+  .pip .sys b { width: 26px; height: 26px; border-radius: 13px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .pip .sys .mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 20px; font-size: 15px; }
+
+  .pip .logo { position: absolute; top: 8px; right: 9px; width: 16px; height: 16px; border-radius: 4.5px; z-index: 1; opacity: .9; }
+  .pip .live { position: absolute; top: 8px; right: 9px; display: flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; color: rgba(255,255,255,.55); letter-spacing: 0; z-index: 1; }
+  .pip .live i { width: 6px; height: 6px; border-radius: 3px; background: #3ECBA8; box-shadow: 0 0 0 0 rgba(62,203,168,.6); animation: pulse 1.6s infinite; }
+  .pip .live.idle i { background: rgba(255,255,255,.35); animation: none; }
+  .pip .live.err i { background: #FF7A5C; animation: none; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(62,203,168,.55); } 70% { box-shadow: 0 0 0 6px rgba(62,203,168,0); } 100% { box-shadow: 0 0 0 0 rgba(62,203,168,0); } }
+
+  .pip .body { position: absolute; inset: 0; padding: 10px 14px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .pip .ja { font-family: "Noto Sans JP", sans-serif; color: rgba(255,255,255,.5); font-size: calc(12px * var(--fs)); line-height: 1.4; }
+  .pip .ko { color: #fff; font-weight: 600; font-size: calc(17px * var(--fs)); line-height: 1.38; letter-spacing: -.02em; }
+  .pip .tmp { color: rgba(255,255,255,.42); }
+  .pip.noSrc .ja { display: none; }
+  .pip .msg { color: rgba(255,255,255,.45); font-size: 13px; font-weight: 500; }
+  .pip .msg.err { color: #FF9B82; }
+
+  /* 시안 A — 자막 띠 */
+  .pip.A .body { padding: 12px 16px 13px; }
+  .pip.A .ko { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pip.A .ja { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; padding-right: 54px; }
+
+  /* 시안 B — 흐르는 말풍선 */
+  .pip.B .body { gap: 7px; padding: 30px 12px 12px; -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent 24px, #000 62px); mask-image: linear-gradient(180deg, transparent 0, transparent 24px, #000 62px); }
+  .pip.B .u { opacity: .5; transition: opacity .3s; }
+  .pip.B .u:last-child { opacity: 1; }
+  .pip.B .u:nth-last-child(2) { opacity: .72; }
+  .pip.B .ko { font-size: calc(15px * var(--fs)); }
+  .pip.B .ja { font-size: calc(11px * var(--fs)); }
+  .pip.B { background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.08); }
+  .pip.B .topbar { display: flex; }
+  .pip.B .body { padding-top: 34px; -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent 26px, #000 64px); mask-image: linear-gradient(180deg, transparent 0, transparent 26px, #000 64px); }
+  .pip.B .ko { color: #191f28; }
+  .pip.B .ja { color: rgba(25,31,40,.45); }
+  .pip.B .tmp { color: rgba(25,31,40,.35); }
+  .pip.B .msg { color: rgba(25,31,40,.45); }
+  .pip.B .msg.err { color: #e5503a; }
+  .pip.B .u { display: flex; gap: 8px; align-items: flex-start; }
+  .pip.B .u .dot { width: 7px; height: 7px; border-radius: 4px; flex: none; margin-top: calc(6px * var(--fs)); }
+  .pip.B.noSrc .u .dot { margin-top: calc(8px * var(--fs)); }
+  .pip.B .u .tx { flex: 1; min-width: 0; }
+  .pip.B .logo { display: none; }
+  .pip .topbar { display: none; position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #3182F6; z-index: 1; align-items: center; justify-content: flex-end; padding: 0 7px; }
+  .pip .topbar img { width: 15px; height: 15px; border-radius: 4px; box-shadow: 0 0 0 1px rgba(255,255,255,.55); }
+
+  /* 시안 C — 큰 글자 한 줄 */
+  .pip.C .body { justify-content: center; align-items: center; text-align: center; padding: 16px 18px; }
+  .pip.C .ko { font-size: calc(21px * var(--fs)); font-weight: 700; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .pip.C .ja { display: none; }
+  .pip.C .lang { position: absolute; top: 8px; left: 10px; font-size: 10.5px; font-weight: 700; color: rgba(255,255,255,.55); }
+
+  /* 앱 화면 */
+  .app { position: absolute; inset: 0; padding: 56px 16px 30px; display: none; color: #000; font-family: -apple-system, "Noto Sans KR", sans-serif; }
+  .phone.light-app .app { display: block; }
+  .phone.light-app .vid, .phone.light-app .pip { display: none; }
+  .app .hd { display: flex; align-items: center; gap: 8px; margin: 2px 0 14px; }
+  .app .back { width: 40px; height: 40px; border-radius: 20px; background: rgba(255,255,255,.75); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.06); display: flex; align-items: center; justify-content: center; font-size: 18px; color: #333; }
+  .app .ttl { font-size: 22px; font-weight: 700; letter-spacing: -.7px; }
+  .app .langbar { display: flex; gap: 10px; margin-bottom: 12px; }
+  .app .track { flex: 1; height: 48px; border-radius: 14px; background: rgba(255,255,255,.8); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.06); display: flex; padding: 3px; }
+  .app .track span { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 16px; font-weight: 600; color: rgba(60,60,67,.66); border-radius: 11px; }
+  .app .track span.on { background: rgba(118,118,128,.12); color: #000; }
+  .app .track .arrow { flex: none; width: 26px; color: rgba(60,60,67,.36); font-size: 14px; }
+  .app .card { background: #fff; border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+  .app .hero { padding: 22px 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .app .rec { width: 86px; height: 86px; border-radius: 43px; background: rgba(14,138,111,.12); display: flex; align-items: center; justify-content: center; position: relative; }
+  .app .rec::after { content: ""; width: 34px; height: 34px; border-radius: 17px; background: var(--accent); transition: all .3s var(--ease); }
+  .app .rec.on::after { width: 28px; height: 28px; border-radius: 7px; background: #FF5A3C; }
+  .app .rec.on { background: rgba(255,90,60,.12); }
+  .app .state { font-size: 15px; font-weight: 600; }
+  .app .state small { display: block; text-align: center; font-size: 12.5px; font-weight: 400; color: rgba(60,60,67,.6); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .app .pipbtn { width: 100%; height: 46px; border-radius: 12px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .app .pipbtn.off { background: rgba(118,118,128,.12); color: rgba(60,60,67,.36); }
+  .app .row { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; min-height: 48px; border-top: .5px solid rgba(60,60,67,.13); font-size: 16px; }
+  .app .row:first-child { border-top: 0; }
+  .app .row .v { color: rgba(60,60,67,.6); font-size: 15px; }
+  .app .seg { display: flex; background: rgba(118,118,128,.12); border-radius: 9px; padding: 2px; }
+  .app .seg b { font-weight: 500; font-size: 13px; padding: 5px 11px; border-radius: 7px; color: rgba(60,60,67,.8); }
+  .app .seg b.on { background: #fff; color: #000; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .app .tg { width: 51px; height: 31px; border-radius: 16px; background: #34c759; position: relative; }
+  .app .tg::after { content: ""; position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.18); }
+  .app .log { padding: 12px 16px 14px; font-size: 14px; line-height: 1.55; }
+  .app .log p { margin: 0 0 9px; }
+  .app .log .j { display: block; font-size: 12px; color: rgba(60,60,67,.5); font-family: "Noto Sans JP", sans-serif; }
+  .app .lab { font-size: 13px; color: rgba(60,60,67,.66); padding: 0 4px 7px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>화면 소리 번역 · PIP 시안</h1>
+  <p class="lede">유튜브처럼 다른 앱에서 나오는 소리를 받아 적어 번역하고, 작은 PIP 창으로 영상 위에 띄운다. 창은 끌어서 옮기고, 가장자리로 밀면 숨는다. 창을 누르면 시스템 버튼이 뜬다.</p>
+
+  <div class="tabs" id="tabs">
+    <button data-v="B" class="on">시안 B · 흐르는 말풍선 (확정)</button>
+    <button data-v="A">시안 A · 자막 띠</button>
+    <button data-v="C">시안 C · 큰 글자</button>
+    <button data-v="app">앱 화면</button>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="phone" id="phone">
+        <div class="isl"></div>
+        <div class="sb"><span class="rec" id="clock">9:41</span><span>●●● ◔ ▮</span></div>
+
+        <div class="vid">
+          <div class="player"><div class="bar"><i></i></div></div>
+          <div class="meta">
+            <div class="t">【도쿄 산책】 비 오는 날 시모키타자와 골목 카페 돌기</div>
+            <div class="s">조회수 12만회 · 2일 전</div>
+          </div>
+          <div class="chips"><span>좋아요 3.1천</span><span>공유</span><span>저장</span></div>
+          <div class="rel"><div class="th" style="background:linear-gradient(135deg,#5b6b8c,#2b3247)"></div><div class="lines"><i></i><i></i><i></i></div></div>
+          <div class="rel"><div class="th" style="background:linear-gradient(135deg,#8c6b5b,#47322b)"></div><div class="lines"><i></i><i></i><i></i></div></div>
+          <div class="rel"><div class="th" style="background:linear-gradient(135deg,#5b8c7a,#2b4740)"></div><div class="lines"><i></i><i></i><i></i></div></div>
+          <div class="rel"><div class="th" style="background:linear-gradient(135deg,#7a5b8c,#3b2b47)"></div><div class="lines"><i></i><i></i><i></i></div></div>
+        </div>
+
+        <div class="pip B" id="pip" style="--fs:1">
+          <div class="topbar"><img alt="" src="data:image/jpeg;base64,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"></div>
+          <div class="body" id="pipBody"></div>
+          <img class="logo" alt="" src="data:image/jpeg;base64,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">
+          <div class="sys"><div class="g"><b>✕</b><b>⤢</b></div><b class="mid">❚❚</b></div>
+          <div class="tab"></div>
+        </div>
+
+        <div class="app">
+          <div class="hd"><div class="back">‹</div><div class="ttl">화면 소리 번역</div></div>
+          <div class="langbar">
+            <div class="track"><span class="on">日本語</span><span class="arrow">→</span><span>한국어</span></div>
+          </div>
+          <div class="card">
+            <div class="hero">
+              <div class="rec on" id="recBtn"></div>
+              <div class="state" id="appState">듣는 중<small id="appTime">03:12</small></div>
+              <div class="pipbtn" id="pipBtn">자막 창 띄우기</div>
+            </div>
+          </div>
+          <div class="lab">자막 창</div>
+          <div class="card">
+            <div class="row">원문 같이 보기<div class="tg"></div></div>
+            <div class="row">글자 크기<div class="seg"><b>작게</b><b class="on">보통</b><b>크게</b></div></div>
+          </div>
+          <div class="lab">받아 적은 말</div>
+          <div class="card"><div class="log" id="appLog"></div></div>
+        </div>
+
+        <div class="home"></div>
+      </div>
+
+      <div class="ctl" id="ctl">
+        <div class="lab">상태</div>
+        <button data-s="live" class="on">번역 중</button>
+        <button data-s="idle">소리 없음</button>
+        <button data-s="err">연결 끊김</button>
+        <div class="lab">보기</div>
+        <button data-o="src" class="on">원문 같이</button>
+        <button data-f="0.88">작게</button>
+        <button data-f="1" class="on">보통</button>
+        <button data-f="1.18">크게</button>
+        <button data-o="sys">시스템 버튼</button>
+        <button data-o="stash">가장자리로 숨기기</button>
+
+      </div>
+    </div>
+
+    <div>
+      <div class="notes" id="noteA" hidden>
+        <h2>시안 A · 자막 띠</h2>
+        <ol>
+          <li><b>영화 자막처럼 가로로 긴 띠.</b> 위 줄에 원문을 흐리게 한 줄, 아래에 번역을 크게 두 줄까지 보여 준다.</li>
+          <li><b>영상을 가장 덜 가린다.</b> 화면 위·아래 가장자리에 붙여 두기 좋다.</li>
+          <li>아직 확정 안 된 말은 흐린 글씨로 먼저 보이고, 확정되면 하얗게 바뀐다.</li>
+          <li>두 줄을 넘으면 앞 문장이 밀려 올라가 사라진다. 지난 말은 앱 화면 기록에서 본다.</li>
+        </ol>
+      </div>
+      <div class="notes" id="noteB">
+        <h2>시안 B · 흐르는 말풍선 (확정)</h2>
+        <ol>
+          <li><b>흰 바탕 + 위에 파란 띠.</b> 띠 오른쪽에 앱 아이콘만 작게. 상태는 글로만 알린다(소리 없음 "듣는 중…", 끊김 빨간 글).</li>
+          <li><b>줄마다 앞에 색 점.</b> 말하는 사람이 바뀌면 점 색이 바뀐다(처음 나온 순서대로 파랑·주황·초록·분홍·보라). 이름표는 없다.</li>
+          <li><b>최근 서너 마디가 위로 흘러간다.</b> 오래된 줄일수록 흐려지고 위쪽은 페이드로 잘린다.</li>
+          <li>말이 빠른 영상(토크·예능)에서 놓친 문장을 바로 다시 볼 수 있다.</li>
+          <li>창이 4:3이라 A보다 영상을 더 가린다. 영상 아래 댓글을 보면서 쓰기 좋다.</li>
+        </ol>
+      </div>
+      <div class="notes" id="noteC" hidden>
+        <h2>시안 C · 큰 글자</h2>
+        <ol>
+          <li><b>번역만 크게, 지금 말 한 마디만.</b> 원문은 안 보여 준다.</li>
+          <li>창을 작게 줄여도 읽힌다. 멀리 두고 보거나 노래·방송을 틀어 둘 때.</li>
+          <li>왼쪽 위에 듣는 언어 → 번역 언어만 작게 표시한다.</li>
+        </ol>
+      </div>
+      <div class="notes" id="noteApp" hidden>
+        <h2>앱 화면 · 화면 소리 번역</h2>
+        <ol>
+          <li><b>가운데 버튼이 iOS 화면 기록 시작 버튼이다.</b> 누르면 시스템 시트가 뜨고 kemometro를 골라 시작한다. 그 동안 상태 바 시계가 빨갛게 된다.</li>
+          <li><b>자막 창 띄우기</b>를 눌러 PIP를 띄운 다음 유튜브로 넘어간다. PIP는 앱이 앞에 있을 때만 시작할 수 있다.</li>
+          <li>원문·글자 크기는 PIP에 바로 반영된다. 받아 적은 말은 아래에 쌓이고, 끝나면 복사하거나 노트로 보낼 수 있다.</li>
+          <li>언어 바는 번역기 메인과 같은 모양. 듣는 언어만 고르고 결과는 늘 한국어.</li>
+        </ol>
+      </div>
+      <div class="notes">
+        <h2>iOS 제약 · 같이 정할 것</h2>
+        <ul>
+          <li><b>PIP 창은 영상이라 투명하게 못 만든다.</b> 배경은 늘 불투명(B 는 흰색)이고, 창 안에 버튼을 둘 수 없다. 누르면 시스템이 닫기·크게·일시정지만 그려 준다. 일시정지는 번역 멈춤으로 쓴다.</li>
+          <li><b>창 크기는 사용자가 핀치로 바꾼다.</b> 우리는 비율만 정한다(B 4:3). 글자는 창 크기에 맞춰 다시 그린다.</li>
+          <li><b>화면 기록은 사용자가 직접 시작해야 한다.</b> 앱이 몰래 켤 수 없고, 넷플릭스처럼 막힌 앱 소리는 안 잡힌다.</li>
+          <li>소리가 한동안 없으면 "듣는 중…"으로 바꾸고 Soniox 연결은 유지한다. 끊기면 다시 잇는 중이라고 빨간 글로 띄운다.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const LINES = [
+  { s: 1, ja: 'はい、今日はね、下北沢に来てます。', ko: '네, 오늘은요, 시모키타자와에 와 있어요.' },
+  { s: 1, ja: 'ちょっと雨降ってるんですけど、逆に雰囲気よくないですか？', ko: '비가 조금 오는데, 오히려 분위기 좋지 않아요?' },
+  { s: 2, ja: 'ね、めっちゃいい感じ。', ko: '그치, 완전 좋다.' },
+  { s: 1, ja: 'このカフェ、前から気になってたんですよ。', ko: '이 카페, 전부터 궁금했거든요.' },
+  { s: 3, ja: 'いらっしゃいませ、店内でお召し上がりですか？', ko: '어서 오세요, 매장에서 드시고 가세요?' },
+  { s: 1, ja: 'はい、カフェラテ二つお願いします。', ko: '네, 카페라테 두 잔 주세요.' },
+  { ja: '店員さんがすごく優しくて、ほっとしました。', ko: '점원분이 엄청 친절해서 안심했어요.' },
+  { ja: '次は古着屋さん、何軒か回ってみようかな。', ko: '다음은 구제 옷 가게 몇 군데 돌아볼까 해요.' }
+];
+
+// 화자 색 — 처음 나온 순서대로
+const SPK = ['#3182F6', '#F59E0B', '#10B981', '#EC4899', '#8B5CF6'];
+const phone = document.getElementById('phone');
+const pip = document.getElementById('pip');
+const body = document.getElementById('pipBody');
+let variant = 'B', state = 'live', done = [], cur = null, idx = 0, step = 0, timer = null;
+let pos = { side: 'bottom', x: 15 };
+
+const SIZES = { A: [330, 106], B: [240, 180], C: [224, 126] };
+
+function place() {
+  const [w, h] = SIZES[variant];
+  pip.style.width = w + 'px';
+  pip.style.height = h + 'px';
+  const left = Math.max(10, Math.min(360 - w - 10, pos.x));
+  pip.style.left = left + 'px';
+  pip.style.top = (pos.side === 'top' ? 62 : 740 - h - 30) + 'px';
+}
+
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+function render() {
+  pip.className = 'pip ' + variant + (pip.classList.contains('noSrc') ? ' noSrc' : '')
+    + (pip.classList.contains('sysOn') ? ' sysOn' : '') + (pip.classList.contains('stash') ? ' stash' : '')
+    + (pip.classList.contains('left') ? ' left' : '');
+  let html = '';
+  if (state === 'err') { body.innerHTML = html + '<div class="msg err">연결이 끊겼어요 · 다시 잇는 중</div>'; return; }
+  if (state === 'idle' && !cur) { body.innerHTML = html + '<div class="msg">듣는 중…</div>'; return; }
+
+  const one = (u, temp) => {
+    const ja = temp ? u.ja.slice(0, u.jaN) : u.ja;
+    const ko = temp ? u.ko.slice(0, u.koN) : u.ko;
+    const jaT = temp && u.jaN < u.ja.length ? '<span class="tmp">' + esc(u.ja.slice(u.jaN, u.jaN + 3)) + '</span>' : '';
+    const koHtml = temp && u.koN === 0 ? '<span class="tmp">…</span>' : esc(ko) + (temp && u.koN < u.ko.length ? '<span class="tmp">…</span>' : '');
+    const dot = '<i class="dot" style="background:' + (SPK[(u.s || 1) - 1] || SPK[0]) + '"></i>';
+    return '<div class="u">' + dot + '<div class="tx"><div class="ja">' + esc(ja) + jaT + '</div><div class="ko">' + koHtml + '</div></div></div>';
+  };
+
+  if (variant === 'B') {
+    const list = done.slice(-3).map(u => one(u, false));
+    if (cur) list.push(one(cur, true));
+    html += list.join('');
+  } else {
+    const u = cur || done[done.length - 1];
+    if (u) html += one(u, !!cur);
+  }
+  body.innerHTML = html;
+  renderLog();
+}
+
+function renderLog() {
+  const log = document.getElementById('appLog');
+  const items = done.slice(-4).map(u => '<p><span class="j">' + esc(u.ja) + '</span>' + esc(u.ko) + '</p>');
+  log.innerHTML = items.join('') || '<p style="color:rgba(60,60,67,.4)">…</p>';
+}
+
+// 원문이 먼저 흘러 들어오고, 문장이 끝나면 번역이 붙는다 (Soniox 실시간 번역 순서)
+function tick() {
+  if (state !== 'live') return;
+  if (!cur) {
+    const L = LINES[idx % LINES.length];
+    cur = { s: L.s, ja: L.ja, ko: L.ko, jaN: 0, koN: 0 };
+    idx++;
+  }
+  if (cur.jaN < cur.ja.length) cur.jaN = Math.min(cur.ja.length, cur.jaN + 2);
+  else if (cur.koN < cur.ko.length) cur.koN = Math.min(cur.ko.length, cur.koN + 3);
+  else {
+    done.push({ s: cur.s, ja: cur.ja, ko: cur.ko });
+    if (done.length > 12) done.shift();
+    cur = null;
+    render();
+    clearInterval(timer);
+    setTimeout(() => { timer = setInterval(tick, 110); }, 1100);
+    return;
+  }
+  render();
+}
+
+function start() { clearInterval(timer); timer = setInterval(tick, 110); }
+
+document.getElementById('tabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  const v = b.dataset.v;
+  ['A', 'B', 'C', 'App'].forEach(k => document.getElementById('note' + k).hidden = (k === 'App' ? v !== 'app' : v !== k));
+  phone.classList.toggle('light-app', v === 'app');
+  document.getElementById('clock').style.background = v === 'app' ? '#ff3b30' : '#ff3b30';
+  if (v !== 'app') { variant = v; place(); render(); }
+};
+
+document.getElementById('ctl').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.s) {
+    state = b.dataset.s;
+    document.querySelectorAll('[data-s]').forEach(x => x.classList.toggle('on', x === b));
+    if (state !== 'live') cur = null;
+    if (state === 'idle') done = done.slice(-1);
+    render();
+    if (state === 'live') start();
+  } else if (b.dataset.bg) {
+    pip.style.background = b.dataset.bg;
+    document.querySelectorAll('[data-bg]').forEach(x => x.classList.toggle('on', x === b));
+  } else if (b.dataset.f) {
+    pip.style.setProperty('--fs', b.dataset.f);
+    document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b));
+  } else if (b.dataset.o === 'src') {
+    b.classList.toggle('on'); pip.classList.toggle('noSrc', !b.classList.contains('on'));
+  } else if (b.dataset.o === 'sys') {
+    b.classList.toggle('on'); pip.classList.toggle('sysOn', b.classList.contains('on'));
+  } else if (b.dataset.o === 'stash') {
+    b.classList.toggle('on'); pip.classList.toggle('stash', b.classList.contains('on'));
+    pip.classList.toggle('left', pos.x < 60 && SIZES[variant][0] < 300);
+  }
+};
+
+// 끌어서 옮기기 — 놓으면 위·아래 가장자리로 붙는다. 옆으로 많이 밀면 숨긴다.
+let drag = null;
+pip.addEventListener('pointerdown', e => {
+  if (pip.classList.contains('stash')) {
+    pip.classList.remove('stash', 'left');
+    document.querySelector('[data-o="stash"]').classList.remove('on');
+    return;
+  }
+  drag = { sx: e.clientX, sy: e.clientY, l: pip.offsetLeft, t: pip.offsetTop, moved: false };
+  pip.setPointerCapture(e.pointerId);
+  pip.classList.add('drag');
+});
+pip.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+  pip.style.left = (drag.l + dx) + 'px';
+  pip.style.top = (drag.t + dy) + 'px';
+});
+pip.addEventListener('pointerup', e => {
+  if (!drag) return;
+  pip.classList.remove('drag');
+  const [w, h] = SIZES[variant];
+  const l = pip.offsetLeft, t = pip.offsetTop;
+  if (!drag.moved) {
+    const b = document.querySelector('[data-o="sys"]');
+    b.classList.toggle('on'); pip.classList.toggle('sysOn', b.classList.contains('on'));
+  } else if (l > 360 - w * 0.55 || l < -w * 0.45) {
+    pip.classList.add('stash');
+    pip.classList.toggle('left', l < 0);
+    document.querySelector('[data-o="stash"]').classList.add('on');
+    pos.x = l < 0 ? 10 : 360 - w - 10;
+  } else {
+    pos.side = t + h / 2 < 370 ? 'top' : 'bottom';
+    pos.x = l;
+  }
+  drag = null;
+  place();
+});
+
+place();
+render();
+start();
+
+// 앱 화면 경과 시간
+let sec = 192;
+setInterval(() => {
+  sec++;
+  document.getElementById('appTime').textContent =
+    String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+}, 1000);
+</script>
+</body>
+</html>
