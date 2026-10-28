@@ -574,27 +574,25 @@ struct TLSettingsPage: View {
                     Text("바 색")
                     TLSwatchRow(colors: TLPalette.bar, selection: $store.barTint)
                 }
+                TLStrengthSlider(value: $store.barStrength)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("아이콘 색")
                     TLSwatchRow(colors: TLPalette.icon, selection: $store.tabIconTint)
                 }
                 Toggle("메뉴 이름 보이기", isOn: $store.tabLabels)
             }
-            Section("버튼 색") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("번역 버튼")
-                    TLSwatchRow(colors: TLPalette.button, selection: $store.buttonTint)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("쓰기 버튼")
-                    TLSwatchRow(colors: TLPalette.write, selection: $store.writeTint)
-                }
+            Section("번역 버튼") {
+                TLSwatchRow(colors: TLPalette.button, selection: $store.buttonTint)
+                TLStrengthSlider(value: $store.buttonStrength)
             }
-            Section("진하기") {
-                Picker("진하기", selection: $store.tintStrength) {
-                    Text("연하게").tag(0.45)
-                    Text("보통").tag(0.7)
-                    Text("진하게").tag(1.0)
+            Section("쓰기 버튼") {
+                TLSwatchRow(colors: TLPalette.write, selection: $store.writeTint)
+                TLStrengthSlider(value: $store.writeStrength)
+            }
+            Section("글래스") {
+                Picker("글래스", selection: $store.glassClear) {
+                    Text("맑은").tag(true)
+                    Text("일반").tag(false)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()

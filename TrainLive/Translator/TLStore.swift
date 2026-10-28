@@ -36,7 +36,12 @@ final class TLStore: ObservableObject {
     /// 스크롤하면 뜨는 쓰기(연필) 버튼 색. 기본은 번역기 아이콘 캐릭터의 노란색.
     @Published var writeTint: String { didSet { d.set(writeTint, forKey: k("write_tint")) } }
     /// 색 진하기 — 글래스 버튼과 하단 바 깔개에 같이 쓴다 (연하게 0.45 · 보통 0.7 · 진하게 1)
-    @Published var tintStrength: Double { didSet { d.set(tintStrength, forKey: k("tint_strength")) } }
+    /// 색 진하기 — 색마다 따로 (0.1 단위, 0.1~1)
+    @Published var barStrength: Double { didSet { d.set(barStrength, forKey: k("bar_strength")) } }
+    @Published var buttonStrength: Double { didSet { d.set(buttonStrength, forKey: k("button_strength")) } }
+    @Published var writeStrength: Double { didSet { d.set(writeStrength, forKey: k("write_strength")) } }
+    /// 새로 그린 글래스(하단 바·쓰기/번역 버튼)의 종류 — 맑은(true) · 일반(false)
+    @Published var glassClear: Bool { didSet { d.set(glassClear, forKey: k("glass_clear")) } }
     /// 하단 바 아이콘 색 (바 색에 맞춰 바꾼다)
     @Published var tabIconTint: String { didSet { d.set(tabIconTint, forKey: k("tab_icon_tint")) } }
     /// 하단 바 아이콘 아래 이름 보이기
@@ -68,7 +73,12 @@ final class TLStore: ObservableObject {
         barTint = d.string(forKey: "tl.bar_tint") ?? TLStore.defaultBarTint
         buttonTint = d.string(forKey: "tl.button_tint") ?? ""
         writeTint = d.string(forKey: "tl.write_tint") ?? TLStore.defaultWriteTint
-        tintStrength = d.object(forKey: "tl.tint_strength") as? Double ?? 1
+        // 예전엔 진하기가 하나였다 — 있으면 그 값에서 시작한다
+        let old = d.object(forKey: "tl.tint_strength") as? Double
+        barStrength = d.object(forKey: "tl.bar_strength") as? Double ?? ((old ?? 1) * 0.8 * 10).rounded() / 10
+        buttonStrength = d.object(forKey: "tl.button_strength") as? Double ?? ((old ?? 1) * 10).rounded() / 10
+        writeStrength = d.object(forKey: "tl.write_strength") as? Double ?? ((old ?? 1) * 10).rounded() / 10
+        glassClear = d.object(forKey: "tl.glass_clear") as? Bool ?? true
         tabIconTint = d.string(forKey: "tl.tab_icon_tint") ?? "#FFFFFF"
         tabLabels = d.object(forKey: "tl.tab_labels") as? Bool ?? true
         ttsModel = d.string(forKey: "tl.gemini_tts_model") ?? ""

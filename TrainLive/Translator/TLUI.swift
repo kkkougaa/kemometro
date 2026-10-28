@@ -53,13 +53,14 @@ extension View {
 
     /// 강조색 글래스. iOS 26 이전엔 글래스가 색을 못 받아 흰 글씨가 묻히니 단색으로 칠한다.
     @ViewBuilder
-    func tlAccentGlass(cornerRadius: CGFloat? = nil, color: Color = .tlAccent) -> some View {
+    func tlAccentGlass(cornerRadius: CGFloat? = nil, color: Color = .tlAccent, clear: Bool = false) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             if let r = cornerRadius {
-                self.glassEffect(.regular.tint(color).interactive(), in: RoundedRectangle(cornerRadius: r, style: .continuous))
+                self.glassEffect((clear ? Glass.clear : Glass.regular).tint(color).interactive(),
+                                 in: RoundedRectangle(cornerRadius: r, style: .continuous))
             } else {
-                self.glassEffect(.regular.tint(color).interactive(), in: Capsule())
+                self.glassEffect((clear ? Glass.clear : Glass.regular).tint(color).interactive(), in: Capsule())
             }
         } else {
             tlAccentSolid(cornerRadius, color)
@@ -178,14 +179,14 @@ enum TLPalette {
     /// 쓰기(연필) 버튼 — 첫 번째가 기본(번역기 아이콘의 노란색)
     static let write = ["#F2B84B", "#BC2448", "#E8789A", "#3182F6", "#0E8A6F", "#7C5CE6", "#191F28"]
 
-    @MainActor static var strength: Double { TLStore.shared.tintStrength }
-    /// 글래스에 칠할 색 — 진하기만큼 투명도를 준다
+    /// 글래스에 칠할 색 — 색마다 정한 진하기만큼 투명도를 준다
     @MainActor static var buttonColor: Color {
-        (Color(tlHex: TLStore.shared.buttonTint) ?? .tlAccent).opacity(strength)
+        (Color(tlHex: TLStore.shared.buttonTint) ?? .tlAccent).opacity(TLStore.shared.buttonStrength)
     }
     @MainActor static var writeColor: Color {
-        (Color(tlHex: TLStore.shared.writeTint) ?? Color(tlHex: TLStore.defaultWriteTint)!).opacity(strength)
+        (Color(tlHex: TLStore.shared.writeTint) ?? Color(tlHex: TLStore.defaultWriteTint)!).opacity(TLStore.shared.writeStrength)
     }
+    @MainActor static var barGlassColor: Color { barColor.opacity(TLStore.shared.barStrength) }
     @MainActor static var barColor: Color { Color(tlHex: TLStore.shared.barTint) ?? Color(tlHex: TLStore.defaultBarTint)! }
 
     /// 버튼 위 글자 색. 색이 연하게 깔리면 바탕이 비쳐 보이니 그만큼 섞어서 밝기를 본다.
@@ -205,7 +206,7 @@ struct TLBottomFade: View {
     @ObservedObject private var store = TLStore.shared
 
     var body: some View {
-        LinearGradient(colors: [TLPalette.barColor.opacity(0), TLPalette.barColor.opacity(0.3 * TLPalette.strength)],
+        LinearGradient(colors: [TLPalette.barColor.opacity(0), TLPalette.barColor.opacity(0.3 * TLStore.shared.barStrength)],
                        startPoint: .top, endPoint: .bottom)
             .frame(height: UIScreen.main.bounds.height * 0.1)
             .ignoresSafeArea(edges: .bottom)
@@ -233,5 +234,24 @@ struct TLSwatchRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// 진하기 슬라이더 — 10% 단위로 끊겨 움직이고, 한 칸마다 톡
+struct TLStrengthSlider: View {
+    @Binding var value: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "circle.dotted").foregroundStyle(Color.tlText3)
+            Slider(value: $value, in: 0.1...1, step: 0.1)
+            Image(systemName: "circle.fill").foregroundStyle(Color.tlText2)
+            Text("\(Int((value * 100).rounded()))%")
+                .font(.system(size: 14))
+                .monospacedDigit()
+                .foregroundStyle(Color.tlText2)
+                .frame(width: 44, alignment: .trailing)
+        }
+        .sensoryFeedback(.selection, trigger: Int((value * 10).rounded()))
     }
 }

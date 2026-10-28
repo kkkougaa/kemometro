@@ -59,8 +59,11 @@ struct TranslatorView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            TLTabBar(tab: $tab, collapsed: barCollapsed && tab == .home, onWrite: write)
-                .ignoresSafeArea(.keyboard)
+            // 평소엔 키보드 뒤에 숨고, 입력칸을 누르면 번역 버튼이 되어 키보드 위로 올라온다
+            TLTabBar(tab: $tab, mode: barMode, busy: m.busy, canTranslate: canTranslate,
+                     onWrite: write, onTranslate: { m.translateOrCancel() })
+                .ignoresSafeArea(barMode == .translate ? [] : .keyboard)
+                .animation(.spring(duration: 0.45, bounce: 0.22), value: barMode)
         }
         .onChange(of: tab) { _, t in visited.insert(t) }
         .overlay {
@@ -78,7 +81,7 @@ struct TranslatorView: View {
         if visited.contains(t) {
             content()
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: focus == nil ? TLTabBar.height(labels: store.tabLabels) + 8 : 0)
+                    Color.clear.frame(height: focus == nil ? TLTabBar.height + 8 : 0)
                 }
                 .opacity(tab == t ? 1 : 0)
                 .allowsHitTesting(tab == t)
@@ -86,24 +89,11 @@ struct TranslatorView: View {
         }
     }
 
-    private var keyboardTranslateButton: some View {
-        Button { m.translateOrCancel() } label: {
-            HStack(spacing: 6) {
-                Text(m.busy ? "취소" : "번역")
-                if !m.busy { Image(systemName: "play.fill").font(.system(size: 10)).opacity(0.75) }
-            }
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(store.buttonTint.isEmpty && store.tintStrength >= 1 ? Color.tlOnAccent
-                             : TLPalette.ink(on: store.buttonTint, strength: store.tintStrength, dark: colorScheme == .dark))
-            .padding(.horizontal, 20)
-            .frame(height: 44)
-            .contentShape(Capsule())
-            .tlAccentGlass(color: TLPalette.buttonColor)
-        }
-        .buttonStyle(.plain)
-        .tapHaptic()
-        .opacity(!m.busy && !canTranslate ? 0.5 : 1)
-        .disabled(!m.busy && !canTranslate)
+    /// 하단 바 모양 — 번역 화면에서만 접히거나 번역 버튼이 된다
+    private var barMode: TLBarMode {
+        guard tab == .home else { return .full }
+        if focus == .input { return .translate }
+        return barCollapsed ? .write : .full
     }
 
     /// 쓰기 버튼 — 번역 화면 맨 위로 올라가 입력칸에 키보드를 연다
@@ -170,18 +160,7 @@ struct TranslatorView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                // 입력 중엔 키보드 위에 번역 버튼을 띄운다 (키보드와 살짝 떨어지게)
-                if focus == .input {
-                    HStack {
-                        Spacer()
-                        keyboardTranslateButton
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             }
-            .animation(.spring(duration: 0.3, bounce: 0.15), value: focus == .input)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $dictTarget) { t in TLDictSheet(m: m, target: t) }
             .fullScreenCover(isPresented: $showBig) {
@@ -422,12 +401,12 @@ struct TranslatorView: View {
                 }
             }
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(store.buttonTint.isEmpty && store.tintStrength >= 1 ? Color.tlOnAccent
-                             : TLPalette.ink(on: store.buttonTint, strength: store.tintStrength, dark: colorScheme == .dark))
+            .foregroundStyle(store.buttonTint.isEmpty && store.buttonStrength >= 1 ? Color.tlOnAccent
+                             : TLPalette.ink(on: store.buttonTint, strength: store.buttonStrength, dark: colorScheme == .dark))
             .frame(maxWidth: .infinity)
             .frame(height: 48)
             .contentShape(Rectangle())
-            .tlAccentGlass(cornerRadius: 12, color: TLPalette.buttonColor)
+            .tlAccentGlass(cornerRadius: 12, color: TLPalette.buttonColor, clear: store.glassClear)
         }
         .buttonStyle(.plain)
         .tapHaptic()

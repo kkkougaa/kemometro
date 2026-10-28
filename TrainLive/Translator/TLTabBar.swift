@@ -2,9 +2,10 @@ import SwiftUI
 import UIKit
 
 // 번역기 하단 바. iOS 기본 탭 바는 글래스에 색을 넣을 수도, 모양을 바꿀 수도 없어서 직접 그린다.
-// · 바 글래스에 설정 색(하단 바)을 칠한다. 아이콘 색·이름 표시도 설정에서.
-// · 번역 화면을 아래로 내리면 바가 오른쪽으로 녹아들며 노란 쓰기 버튼 하나로 바뀐다
-//   (iOS 26 GlassEffectContainer + glassEffectID 로 같은 글래스가 모양만 바꾼다).
+// 바 하나가 상황에 따라 세 모양으로 녹아들며 바뀐다 (iOS 26 GlassEffectContainer + glassEffectID):
+// · 평소: 탭 네 개가 든 글래스 바 (하단 바 색)
+// · 번역 화면을 내리면: 오른쪽 노란 쓰기 버튼
+// · 입력칸을 누르면: 키보드 위 오른쪽 번역 버튼 (번역 버튼 색) — 쓰기 버튼에서 바로 이어진다
 
 struct TLTabItem: Identifiable {
     let id: TLTab
@@ -19,24 +20,37 @@ struct TLTabItem: Identifiable {
     ]
 }
 
+enum TLBarMode: Equatable { case full, write, translate }
+
 struct TLTabBar: View {
     @Binding var tab: TLTab
-    /// 접힘 — 쓰기 버튼 하나만 남는다
-    let collapsed: Bool
+    let mode: TLBarMode
+    var busy = false
+    var canTranslate = true
     let onWrite: () -> Void
+    let onTranslate: () -> Void
     @ObservedObject private var store = TLStore.shared
     @Namespace private var ns
 
-    /// 바 높이 (이름을 끄면 낮아진다)
-    static func height(labels: Bool) -> CGFloat { labels ? 62 : 54 }
+    /// 바 높이 — 이름을 꺼도 같은 높이를 지킨다
+    static let height: CGFloat = 62
+    /// 쓰기·번역 버튼 높이
+    private let actionH: CGFloat = 54
 
     private var iconColor: Color { Color(tlHex: store.tabIconTint) ?? .white }
-    private var barTint: Color { TLPalette.barColor.opacity(0.85 * store.tintStrength) }
+    private var barTint: Color { TLPalette.barGlassColor }
+    private var actionTint: Color { mode == .write ? TLPalette.writeColor : TLPalette.buttonColor }
+    private var actionInk: Color {
+        mode == .write
+            ? TLPalette.ink(on: store.writeTint, strength: store.writeStrength)
+            : (store.buttonTint.isEmpty && store.buttonStrength >= 1
+                ? Color.tlOnAccent : TLPalette.ink(on: store.buttonTint, strength: store.buttonStrength))
+    }
 
     var body: some View {
         content
             .padding(.horizontal, 16)
-            .padding(.bottom, 6)
+            .padding(.bottom, mode == .translate ? 12 : 6)
     }
 
     @ViewBuilder
@@ -55,20 +69,25 @@ struct TLTabBar: View {
     // MARK: iOS 26 — 리퀴드 글래스
 
     #if compiler(>=6.2)
+    /// 설정 → 모양 → 글래스: 맑은 · 일반
+    @available(iOS 26.0, *)
+    private var glass: Glass { store.glassClear ? .clear : .regular }
+
     @available(iOS 26.0, *)
     private var glassBar: some View {
         GlassEffectContainer(spacing: 24) {
             HStack(spacing: 0) {
-                if collapsed {
-                    Spacer(minLength: 0)
-                    writeLabel
-                        .glassEffect(.regular.tint(TLPalette.writeColor).interactive(), in: Circle())
-                        .glassEffectID("bar", in: ns)
-                        .onTapGesture { onWrite() }
-                } else {
+                if mode == .full {
                     items
-                        .glassEffect(.regular.tint(barTint).interactive(), in: Capsule())
+                        .glassEffect(glass.tint(barTint).interactive(), in: Capsule())
                         .glassEffectID("bar", in: ns)
+                } else {
+                    // 쓰기 ↔ 번역은 같은 버튼이 색·아이콘·폭만 바꾼다
+                    Spacer(minLength: 0)
+                    actionLabel
+                        .glassEffect(glass.tint(actionTint).interactive(), in: Capsule())
+                        .glassEffectID("bar", in: ns)
+                        .onTapGesture { tapAction() }
                 }
             }
         }
@@ -79,19 +98,23 @@ struct TLTabBar: View {
 
     private var plainBar: some View {
         HStack(spacing: 0) {
-            if collapsed {
-                Spacer(minLength: 0)
-                writeLabel
-                    .background(Circle().fill(TLPalette.writeColor))
-                    .matchedGeometryEffect(id: "bar", in: ns)
-                    .onTapGesture { onWrite() }
-            } else {
+            if mode == .full {
                 items
                     .background(Capsule().fill(.ultraThinMaterial))
                     .background(Capsule().fill(barTint))
                     .matchedGeometryEffect(id: "bar", in: ns)
+            } else {
+                Spacer(minLength: 0)
+                actionLabel
+                    .background(Capsule().fill(actionTint))
+                    .matchedGeometryEffect(id: "bar", in: ns)
+                    .onTapGesture { tapAction() }
             }
         }
+    }
+
+    private func tapAction() {
+        if mode == .write { onWrite() } else if busy || canTranslate { onTranslate() }
     }
 
     // MARK: 조각
@@ -105,9 +128,9 @@ struct TLTabBar: View {
                     withAnimation(.spring(duration: 0.35, bounce: 0.2)) { tab = it.id }
                     TLHaptic.select()
                 } label: {
-                    VStack(spacing: 2) {
+                    VStack(spacing: 3) {
                         Image(systemName: it.symbol)
-                            .font(.system(size: store.tabLabels ? 18 : 20, weight: .semibold))
+                            .font(.system(size: store.tabLabels ? 18 : 21, weight: .semibold))
                         if store.tabLabels {
                             Text(it.title)
                                 .font(.system(size: 10, weight: .semibold))
@@ -115,8 +138,8 @@ struct TLTabBar: View {
                         }
                     }
                     .foregroundStyle(iconColor.opacity(on ? 1 : 0.62))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Self.height(labels: store.tabLabels) - 10)
+                    // 이름을 꺼도 칸 높이는 그대로, 아이콘은 가운데
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background {
                         if on {
                             Capsule()
@@ -131,16 +154,33 @@ struct TLTabBar: View {
             }
         }
         .padding(5)
-        .frame(height: Self.height(labels: store.tabLabels))
+        .frame(height: Self.height)
     }
 
-    private var writeLabel: some View {
-        Image(systemName: "square.and.pencil")
-            .font(.system(size: 21, weight: .semibold))
-            .foregroundStyle(TLPalette.ink(on: store.writeTint, strength: store.tintStrength))
-            .frame(width: Self.height(labels: store.tabLabels), height: Self.height(labels: store.tabLabels))
-            .contentShape(Circle())
-            .accessibilityLabel("쓰기")
-            .accessibilityAddTraits(.isButton)
+    /// 쓰기(연필 동그라미) ↔ 번역(알약)
+    private var actionLabel: some View {
+        HStack(spacing: 6) {
+            if mode == .write {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 21, weight: .semibold))
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+            } else {
+                Text(busy ? "취소" : "번역")
+                    .font(.system(size: 16, weight: .semibold))
+                    .transition(.opacity)
+                Image(systemName: busy ? "xmark" : "play.fill")
+                    .font(.system(size: busy ? 12 : 11, weight: .bold))
+                    .opacity(0.8)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+            }
+        }
+        .foregroundStyle(actionInk)
+        .padding(.horizontal, mode == .write ? 0 : 22)
+        .frame(minWidth: actionH)
+        .frame(height: actionH)
+        .contentShape(Capsule())
+        .opacity(mode == .translate && !busy && !canTranslate ? 0.55 : 1)
+        .accessibilityLabel(mode == .write ? "쓰기" : (busy ? "취소" : "번역"))
+        .accessibilityAddTraits(.isButton)
     }
 }
