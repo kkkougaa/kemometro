@@ -3,8 +3,8 @@ import SwiftUI
 import UIKit
 
 // 번역기 메인 화면. translator.html 의 배치를 그대로 옮겼다:
-// 헤더 → 언어 바 → 입력 카드 → 번역 옵션 → 결과 → 피드백. 메뉴는 왼쪽 서랍.
-// 아래 탭 바(iOS 26 에선 리퀴드 글래스): 번역 · PIP 번역 · 대화 모드 · 설정
+// 헤더 → 언어 바 → 입력 카드 → 번역 옵션 → 결과 → 피드백.
+// 아래 탭 바(iOS 26 에선 리퀴드 글래스): 번역 · PIP 번역 · 대화 모드 · 메뉴(오른쪽 서랍, 설정은 그 안에)
 
 enum TLRoute: Hashable { case history, glossary, settings, tones, chips, study, words, talk, screen }
 enum TLTab: Hashable { case home, screen, talk, settings }
@@ -21,6 +21,8 @@ struct TranslatorView: View {
     @State private var visited: Set<TLTab> = [.home]
     /// 쓰기 버튼 → 번역 화면 맨 위로
     @State private var scrollTopTick = 0
+    /// 키보드가 떠 있으면 하단 바가 그 뒤로 숨으니 바 자리를 비우지 않는다
+    @State private var keyboardUp = false
     @State private var drawerOpen = false
     @State private var optOpen = false
     @State private var fbText = ""
@@ -49,11 +51,12 @@ struct TranslatorView: View {
         // 시스템 탭 바 대신 직접 그린 글래스 바(TLTabBar). 화면은 겹쳐 두고 보이는 것만 바꾼다.
         ZStack {
             tabPage(.home) { homeStack }
-            tabPage(.screen) { NavigationStack { TLScreenPage() } }
-            tabPage(.talk) { NavigationStack { TLTalkPage(otherLang: m.tgtLang) } }
+            tabPage(.screen) { NavigationStack { TLScreenPage().tlBarSpace() } }
+            tabPage(.talk) { NavigationStack { TLTalkPage(otherLang: m.tgtLang).tlBarSpace() } }
             tabPage(.settings) {
                 NavigationStack(path: $setPath) {
                     TLSettingsPage(tgtLang: m.tgtLang)
+                        .tlBarSpace()
                         .navigationDestination(for: TLRoute.self) { r in routeView(r) }
                 }
             }
@@ -61,11 +64,14 @@ struct TranslatorView: View {
         .overlay(alignment: .bottom) {
             // 평소엔 키보드 뒤에 숨고, 입력칸을 누르면 번역 버튼이 되어 키보드 위로 올라온다
             TLTabBar(tab: $tab, mode: barMode, busy: m.busy, canTranslate: canTranslate,
-                     onWrite: write, onTranslate: { m.translateOrCancel() })
+                     onWrite: write, onTranslate: { m.translateOrCancel() },
+                     onMenu: { focus = nil; drawerOpen = true })
                 .ignoresSafeArea(barMode == .translate ? [] : .keyboard)
                 .animation(.spring(duration: 0.45, bounce: 0.22), value: barMode)
         }
         .onChange(of: tab) { _, t in visited.insert(t) }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
         .overlay {
             TLDrawer(open: $drawerOpen) { route in
                 if route == .settings { tab = .settings } else { tab = .home; path = [route] }
@@ -80,9 +86,7 @@ struct TranslatorView: View {
     private func tabPage<V: View>(_ t: TLTab, @ViewBuilder _ content: () -> V) -> some View {
         if visited.contains(t) {
             content()
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: focus == nil ? TLTabBar.height + 8 : 0)
-                }
+                .environment(\.tlBarSpace, keyboardUp || focus != nil ? 0 : TLTabBar.height + 8)
                 .opacity(tab == t ? 1 : 0)
                 .allowsHitTesting(tab == t)
                 .accessibilityHidden(tab != t)
@@ -105,8 +109,13 @@ struct TranslatorView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focus = .input }
     }
 
-    @ViewBuilder
+    /// 들어가는 화면에도 하단 바 자리를 비운다
     private func routeView(_ r: TLRoute) -> some View {
+        routeContent(r).tlBarSpace()
+    }
+
+    @ViewBuilder
+    private func routeContent(_ r: TLRoute) -> some View {
         switch r {
         case .history: TLHistoryPage { h in m.loadHistory(h); path = []; tab = .home }
         case .glossary: TLGlossaryPage(lang: m.tgtLang)
@@ -162,6 +171,7 @@ struct TranslatorView: View {
 
             }
             .toolbar(.hidden, for: .navigationBar)
+            .tlBarSpace()
             .sheet(item: $dictTarget) { t in TLDictSheet(m: m, target: t) }
             .fullScreenCover(isPresented: $showBig) {
                 TLBigView(text: TLText.cleanForCopy(m.result),
@@ -194,10 +204,12 @@ struct TranslatorView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            TLCircleButton(symbol: "line.3.horizontal", label: "메뉴") {
-                focus = nil
-                drawerOpen = true
-            }
+            Image("tlmark")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
             Text("번역기")
                 .font(.system(size: 22, weight: .bold))
                 .tracking(-0.7)

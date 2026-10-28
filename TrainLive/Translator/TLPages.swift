@@ -15,16 +15,17 @@ struct TLDrawer: View {
     }
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        // 하단 바 메뉴 버튼이 오른쪽에 있어서 서랍도 오른쪽에서 나온다
+        ZStack(alignment: .trailing) {
             if open {
                 Color.black.opacity(0.32)
                     .ignoresSafeArea()
                     .onTapGesture { open = false }
                     .transition(.opacity)
                 panel
-                    .transition(.move(edge: .leading))
+                    .transition(.move(edge: .trailing))
                     .gesture(DragGesture(minimumDistance: 20).onEnded { v in
-                        if v.translation.width < -60 { open = false }
+                        if v.translation.width > 60 { open = false }
                     })
             }
         }
@@ -82,7 +83,7 @@ struct TLDrawer: View {
         .frame(width: 300)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color.tlCard.ignoresSafeArea())
-        .shadow(color: .black.opacity(0.18), radius: 20, x: 4)
+        .shadow(color: .black.opacity(0.18), radius: 20, x: -4)
     }
 
     private func quick(_ title: String, _ action: @escaping () -> Void) -> some View {
@@ -307,6 +308,10 @@ struct TLSettingsPage: View {
     @State private var banned = ""
     @State private var loaded = false
     @State private var keyVisible = false
+    /// 키 확인 결과 — (성공, 문구)
+    @State private var geminiCheck: (ok: Bool, message: String)?
+    @State private var sonioxCheck: (ok: Bool, message: String)?
+    @State private var checking = ""
     @ObservedObject private var audio = TLAudio.shared
     @State private var previewLoading = false
     @State private var iconName: String? = UIApplication.shared.alternateIconName
@@ -385,7 +390,7 @@ struct TLSettingsPage: View {
     private func row<D: View>(_ title: String, _ symbol: String, _ color: Color, trailing: String = "", warn: Bool = false,
                               @ViewBuilder _ dest: @escaping () -> D) -> some View {
         NavigationLink {
-            dest()
+            dest().tlBarSpace()
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
@@ -420,12 +425,36 @@ struct TLSettingsPage: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .onChange(of: store.apiKey) { _, _ in geminiCheck = nil }
+                checkRow("키 확인", busy: checking == "gemini", result: geminiCheck) {
+                    checking = "gemini"
+                    Task {
+                        geminiCheck = await Gemini.checkKey(store.apiKey)
+                        checking = ""
+                        if geminiCheck?.ok == true { TLHaptic.done() } else { TLHaptic.error() }
+                    }
+                }
+                Link(destination: URL(string: "https://aistudio.google.com/apikey")!) {
+                    Label("키 발급·관리 (Google AI Studio)", systemImage: "arrow.up.right.square")
+                }
             }
             Section("Soniox API 키") {
                 SecureField("대화 모드·말로 입력", text: $store.sonioxKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(.system(size: 16, design: .monospaced))
+                    .onChange(of: store.sonioxKey) { _, _ in sonioxCheck = nil }
+                checkRow("키 확인", busy: checking == "soniox", result: sonioxCheck) {
+                    checking = "soniox"
+                    Task {
+                        sonioxCheck = await Self.checkSoniox(store.sonioxKey)
+                        checking = ""
+                        if sonioxCheck?.ok == true { TLHaptic.done() } else { TLHaptic.error() }
+                    }
+                }
+                Link(destination: URL(string: "https://console.soniox.com")!) {
+                    Label("키 발급·관리 (Soniox 콘솔)", systemImage: "arrow.up.right.square")
+                }
             }
             Section {
                 Link(destination: URL(string: "https://ai.google.dev/gemini-api/docs/models")!) {
@@ -435,6 +464,50 @@ struct TLSettingsPage: View {
         }
         .tint(.tlAccent)
         .navigationTitle("연결")
+    }
+
+    /// 키 확인 줄 — 누르면 불러 보고 결과를 오른쪽에
+    private func checkRow(_ title: String, busy: Bool, result: (ok: Bool, message: String)?,
+                          action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title).foregroundStyle(Color.tlAccent)
+                Spacer()
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else if let r = result {
+                    Image(systemName: r.ok ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundStyle(r.ok ? Color.tlAccent : Color.tlRed)
+                    Text(r.message)
+                        .font(.system(size: 13))
+                        .foregroundStyle(r.ok ? Color.tlText2 : Color.tlRed)
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .disabled(busy)
+    }
+
+    /// Soniox 키 확인 — 모델 목록을 불러 본다
+    static func checkSoniox(_ key: String) async -> (ok: Bool, message: String) {
+        let k = key.trimmed
+        if k.isEmpty { return (false, "키를 먼저 넣어 주세요.") }
+        guard let u = URL(string: "https://api.soniox.com/v1/models") else { return (false, "") }
+        var r = URLRequest(url: u, timeoutInterval: 15)
+        r.setValue("Bearer " + k, forHTTPHeaderField: "Authorization")
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: r)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            switch status {
+            case 200: return (true, "사용할 수 있는 키예요.")
+            case 401, 403: return (false, "키가 올바르지 않아요.")
+            case 402: return (false, "Soniox 잔액이 없어요.")
+            default: return (false, "확인하지 못했어요. (\(status))")
+            }
+        } catch {
+            return (false, "연결이 안 돼요. 인터넷을 확인해 주세요.")
+        }
     }
 
     // MARK: 번역

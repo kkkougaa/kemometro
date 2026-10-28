@@ -3,7 +3,7 @@ import UIKit
 
 // 번역기 하단 바. iOS 기본 탭 바는 글래스에 색을 넣을 수도, 모양을 바꿀 수도 없어서 직접 그린다.
 // 바 하나가 상황에 따라 세 모양으로 녹아들며 바뀐다 (iOS 26 GlassEffectContainer + glassEffectID):
-// · 평소: 탭 네 개가 든 글래스 바 (하단 바 색)
+// · 평소: 탭 셋 + 메뉴가 든 글래스 바 (하단 바 색). 메뉴는 탭이 아니라 오른쪽 서랍을 연다
 // · 번역 화면을 내리면: 오른쪽 노란 쓰기 버튼
 // · 입력칸을 누르면: 키보드 위 오른쪽 번역 버튼 (번역 버튼 색) — 쓰기 버튼에서 바로 이어진다
 
@@ -16,7 +16,8 @@ struct TLTabItem: Identifiable {
         TLTabItem(id: .home, title: "번역", symbol: "character.bubble.fill"),
         TLTabItem(id: .screen, title: "PIP 번역", symbol: "pip.fill"),
         TLTabItem(id: .talk, title: "대화 모드", symbol: "bubble.left.and.text.bubble.right.fill"),
-        TLTabItem(id: .settings, title: "설정", symbol: "gearshape.fill")
+        // 설정 탭 자리 — 누르면 서랍을 열고, 서랍에서 설정을 고르면 이 칸에 불이 켜진다
+        TLTabItem(id: .settings, title: "메뉴", symbol: "line.3.horizontal")
     ]
 }
 
@@ -29,6 +30,7 @@ struct TLTabBar: View {
     var canTranslate = true
     let onWrite: () -> Void
     let onTranslate: () -> Void
+    var onMenu: () -> Void = {}
     @ObservedObject private var store = TLStore.shared
     @Namespace private var ns
 
@@ -124,6 +126,7 @@ struct TLTabBar: View {
             ForEach(TLTabItem.all) { it in
                 let on = tab == it.id
                 Button {
+                    if it.id == .settings { TLHaptic.select(); onMenu(); return }
                     guard tab != it.id else { return }
                     withAnimation(.spring(duration: 0.35, bounce: 0.2)) { tab = it.id }
                     TLHaptic.select()
@@ -183,4 +186,35 @@ struct TLTabBar: View {
         .accessibilityLabel(mode == .write ? "쓰기" : (busy ? "취소" : "번역"))
         .accessibilityAddTraits(.isButton)
     }
+}
+
+// MARK: 하단 바 자리
+
+/// 하단 바가 덮는 높이. 번역기 화면이 정해서 내려보낸다 (키보드가 떠 있으면 0).
+private struct TLBarSpaceKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var tlBarSpace: CGFloat {
+        get { self[TLBarSpaceKey.self] }
+        set { self[TLBarSpaceKey.self] = newValue }
+    }
+}
+
+/// 화면 아래에 하단 바 자리를 비운다. 스크롤은 바 밑으로 지나가되 맨 끝에 그만큼 여백이 붙고,
+/// 스크롤이 아닌 아래 버튼(대화 모드 등)은 바 위에만 놓인다.
+/// 내비게이션 바깥에 걸면 안쪽 화면까지 안 내려가서, 화면마다 직접 붙인다.
+private struct TLBarSpaceModifier: ViewModifier {
+    @Environment(\.tlBarSpace) private var space
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: space).allowsHitTesting(false)
+        }
+    }
+}
+
+extension View {
+    func tlBarSpace() -> some View { modifier(TLBarSpaceModifier()) }
 }

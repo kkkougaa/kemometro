@@ -183,6 +183,23 @@ enum Gemini {
         return out
     }
 
+    /// 설정 → 연결 "키 확인": 모델 목록을 한 번 불러 본다 (돈이 안 드는 호출)
+    static func checkKey(_ key: String) async -> (ok: Bool, message: String) {
+        let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        if k.isEmpty { return (false, "키를 먼저 넣어 주세요.") }
+        guard let u = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1") else { return (false, "") }
+        var r = URLRequest(url: u, timeoutInterval: 15)
+        r.setValue(k, forHTTPHeaderField: "x-goog-api-key")
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: r)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 200 { return (true, "사용할 수 있는 키예요.") }
+            return (false, apiError(status: status, data: data).message)
+        } catch {
+            return (false, "연결이 안 돼요. 인터넷을 확인해 주세요.")
+        }
+    }
+
     static func texts(_ obj: [String: Any]) -> String {
         guard let c = (obj["candidates"] as? [[String: Any]])?.first,
               let content = c["content"] as? [String: Any],
