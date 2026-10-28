@@ -63,6 +63,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kouga.kemometro
+        # 아이폰 전용. XcodeGen 이 타깃마다 "1,2"(아이패드 포함)를 넣어서 여기서 다시 막는다 —
+        # 아이패드가 들어가면 세로만 지원하는 앱은 업로드 검증에서 떨어진다.
+        TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_NAME: TrainLive
         INFOPLIST_KEY_CFBundleDisplayName: kemometro
         SWIFT_EMIT_LOC_STRINGS: "NO"
