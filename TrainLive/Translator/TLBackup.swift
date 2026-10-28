@@ -88,6 +88,15 @@ enum TLBackup {
         s.charName = d.string(forKey: "tl.char_name") ?? s.charName
         s.charPrompt = d.string(forKey: "tl.char_prompt_default") ?? s.charPrompt
         s.sonioxKey = d.string(forKey: "tl.soniox_key") ?? s.sonioxKey
+        // 얼굴·음성·이미지 설정도 바로 화면에 반영한다 (예전엔 앱을 다시 켜야 바뀌었다)
+        s.charX = d.string(forKey: "tl.char_x") ?? s.charX
+        s.customIcon = d.string(forKey: "tl.custom_icon") ?? s.customIcon
+        s.ttsModel = d.string(forKey: "tl.gemini_tts_model") ?? s.ttsModel
+        s.ttsVoice = d.string(forKey: "tl.gemini_tts_voice") ?? s.ttsVoice
+        s.ttsStyle = d.string(forKey: "tl.gemini_tts_style") ?? s.ttsStyle
+        s.imageModel = d.string(forKey: "tl.gemini_image_model") ?? s.imageModel
+        if let size = d.string(forKey: "tl.image_out_size"), TLStore.imageSizesAccepted.contains(size) { s.imageSize = size }
+        TLAvatar.shared.refresh()
         if let raw = p.data["custom_tones"], let data = raw.data(using: .utf8),
            let tones = try? JSONDecoder().decode([Tone].self, from: data) {
             s.setTones(tones)

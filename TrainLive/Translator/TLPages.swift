@@ -569,11 +569,18 @@ struct TLSettingsPage: View {
 
     private var lookPage: some View {
         Form {
-            Section("색") {
+            Section("하단 바") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("하단 바")
+                    Text("바 색")
                     TLSwatchRow(colors: TLPalette.bar, selection: $store.barTint)
                 }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("아이콘 색")
+                    TLSwatchRow(colors: TLPalette.icon, selection: $store.tabIconTint)
+                }
+                Toggle("메뉴 이름 보이기", isOn: $store.tabLabels)
+            }
+            Section("버튼 색") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("번역 버튼")
                     TLSwatchRow(colors: TLPalette.button, selection: $store.buttonTint)

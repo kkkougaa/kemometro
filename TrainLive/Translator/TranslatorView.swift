@@ -17,6 +17,10 @@ struct TranslatorView: View {
     @State private var tab: TLTab = .home
     /// 아래로 스크롤하면 탭 바를 접고 오른쪽 아래에 쓰기 버튼을 띄운다
     @State private var barCollapsed = false
+    /// 한 번 연 탭만 만들어 두고 계속 살려 둔다 (전환해도 입력·스크롤이 그대로)
+    @State private var visited: Set<TLTab> = [.home]
+    /// 쓰기 버튼 → 번역 화면 맨 위로
+    @State private var scrollTopTick = 0
     @State private var drawerOpen = false
     @State private var optOpen = false
     @State private var fbText = ""
@@ -42,27 +46,23 @@ struct TranslatorView: View {
     private var useDevice: Bool { store.dictationEngine != "soniox" || !dictation.available }
 
     var body: some View {
-        TabView(selection: $tab) {
-            homeStack
-                .tlBottomFade()
-                .tabItem { Label("번역", systemImage: "character.bubble") }
-                .tag(TLTab.home)
-            NavigationStack { TLScreenPage() }
-                .tlBottomFade()
-                .tabItem { Label("PIP 번역", systemImage: "pip") }
-                .tag(TLTab.screen)
-            NavigationStack { TLTalkPage(otherLang: m.tgtLang) }
-                .tlBottomFade()
-                .tabItem { Label("대화 모드", systemImage: "bubble.left.and.text.bubble.right") }
-                .tag(TLTab.talk)
-            NavigationStack(path: $setPath) {
-                TLSettingsPage(tgtLang: m.tgtLang)
-                    .navigationDestination(for: TLRoute.self) { r in routeView(r) }
+        // 시스템 탭 바 대신 직접 그린 글래스 바(TLTabBar). 화면은 겹쳐 두고 보이는 것만 바꾼다.
+        ZStack {
+            tabPage(.home) { homeStack }
+            tabPage(.screen) { NavigationStack { TLScreenPage() } }
+            tabPage(.talk) { NavigationStack { TLTalkPage(otherLang: m.tgtLang) } }
+            tabPage(.settings) {
+                NavigationStack(path: $setPath) {
+                    TLSettingsPage(tgtLang: m.tgtLang)
+                        .navigationDestination(for: TLRoute.self) { r in routeView(r) }
+                }
             }
-            .tlBottomFade()
-            .tabItem { Label("설정", systemImage: "gearshape") }
-            .tag(TLTab.settings)
         }
+        .overlay(alignment: .bottom) {
+            TLTabBar(tab: $tab, collapsed: barCollapsed && tab == .home, onWrite: write)
+                .ignoresSafeArea(.keyboard)
+        }
+        .onChange(of: tab) { _, t in visited.insert(t) }
         .overlay {
             TLDrawer(open: $drawerOpen) { route in
                 if route == .settings { tab = .settings } else { tab = .home; path = [route] }
@@ -70,6 +70,49 @@ struct TranslatorView: View {
         }
         .tint(.tlAccent)
         .task { TLShare.publish() }
+    }
+
+    /// 탭 화면 하나 — 처음 열 때 만들고, 아래 바 높이만큼 내용을 띄운다
+    @ViewBuilder
+    private func tabPage<V: View>(_ t: TLTab, @ViewBuilder _ content: () -> V) -> some View {
+        if visited.contains(t) {
+            content()
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: focus == nil ? TLTabBar.height(labels: store.tabLabels) + 8 : 0)
+                }
+                .opacity(tab == t ? 1 : 0)
+                .allowsHitTesting(tab == t)
+                .accessibilityHidden(tab != t)
+        }
+    }
+
+    private var keyboardTranslateButton: some View {
+        Button { m.translateOrCancel() } label: {
+            HStack(spacing: 6) {
+                Text(m.busy ? "취소" : "번역")
+                if !m.busy { Image(systemName: "play.fill").font(.system(size: 10)).opacity(0.75) }
+            }
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(store.buttonTint.isEmpty && store.tintStrength >= 1 ? Color.tlOnAccent
+                             : TLPalette.ink(on: store.buttonTint, strength: store.tintStrength, dark: colorScheme == .dark))
+            .padding(.horizontal, 20)
+            .frame(height: 44)
+            .contentShape(Capsule())
+            .tlAccentGlass(color: TLPalette.buttonColor)
+        }
+        .buttonStyle(.plain)
+        .tapHaptic()
+        .opacity(!m.busy && !canTranslate ? 0.5 : 1)
+        .disabled(!m.busy && !canTranslate)
+    }
+
+    /// 쓰기 버튼 — 번역 화면 맨 위로 올라가 입력칸에 키보드를 연다
+    private func write() {
+        TLHaptic.select()
+        tab = .home
+        scrollTopTick += 1
+        withAnimation(.spring(duration: 0.4, bounce: 0.2)) { barCollapsed = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focus = .input }
     }
 
     @ViewBuilder
@@ -111,20 +154,10 @@ struct TranslatorView: View {
                     }
                     .coordinateSpace(name: "homeScroll")
                     .scrollDismissesKeyboard(.interactively)
-                    .onPreferenceChange(TLScrollOffsetKey.self) { y in
-                        // 조금 내려가면 접고, 거의 맨 위로 돌아오면 편다
-                        let collapse = y < -90
-                        if collapse != barCollapsed {
-                            withAnimation(.spring(duration: 0.38, bounce: 0.18)) { barCollapsed = collapse }
-                        }
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        if barCollapsed && focus == nil {
-                            writeButton(proxy)
-                                .padding(.trailing, 18)
-                                .padding(.bottom, 10)
-                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
-                        }
+                    .onPreferenceChange(TLScrollOffsetKey.self) { y in setCollapsed(y < -90) }
+                    .modifier(TLScrollWatch { down in setCollapsed(down > 90) })
+                    .onChange(of: scrollTopTick) { _, _ in
+                        withAnimation(.spring(duration: 0.45, bounce: 0.12)) { proxy.scrollTo("top", anchor: .top) }
                     }
                 }
 
@@ -136,20 +169,20 @@ struct TranslatorView: View {
                         .padding(.bottom, 24)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbar(barCollapsed ? .hidden : .visible, for: .tabBar)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    if focus == .input {
+
+                // 입력 중엔 키보드 위에 번역 버튼을 띄운다 (키보드와 살짝 떨어지게)
+                if focus == .input {
+                    HStack {
                         Spacer()
-                        Button { m.translateOrCancel() } label: {
-                            Text(m.busy ? "취소" : "번역").fontWeight(.semibold)
-                        }
-                        .disabled(!m.busy && !canTranslate)
+                        keyboardTranslateButton
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .animation(.spring(duration: 0.3, bounce: 0.15), value: focus == .input)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $dictTarget) { t in TLDictSheet(m: m, target: t) }
             .fullScreenCover(isPresented: $showBig) {
                 TLBigView(text: TLText.cleanForCopy(m.result),
@@ -172,22 +205,10 @@ struct TranslatorView: View {
         }
     }
 
-    /// 접힌 탭 바 자리의 쓰기 버튼 — 맨 위로 올라가 입력칸에 키보드를 연다
-    private func writeButton(_ proxy: ScrollViewProxy) -> some View {
-        Button {
-            withAnimation(.spring(duration: 0.45, bounce: 0.12)) { proxy.scrollTo("top", anchor: .top) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focus = .input }
-        } label: {
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(TLPalette.ink(on: store.writeTint, strength: store.tintStrength, dark: colorScheme == .dark))
-                .frame(width: 56, height: 56)
-                .tlAccentGlass(color: TLPalette.writeColor)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .tapHaptic()
-        .accessibilityLabel("쓰기")
+    /// 조금 내려가면 바를 접고, 거의 맨 위로 돌아오면 편다. 글래스가 녹아드는 애니메이션은 바가 맡는다.
+    private func setCollapsed(_ c: Bool) {
+        guard c != barCollapsed else { return }
+        withAnimation(.spring(duration: 0.45, bounce: 0.22)) { barCollapsed = c }
     }
 
     // MARK: 헤더
@@ -1000,4 +1021,21 @@ struct TranslatorView: View {
 struct TLScrollOffsetKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// iOS 18+ 는 스크롤 위치를 시스템에서 바로 받는다 (내려간 거리, 위로 당기면 음수)
+struct TLScrollWatch: ViewModifier {
+    let onChange: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { g in
+                g.contentOffset.y + g.contentInsets.top
+            } action: { _, y in
+                onChange(y)
+            }
+        } else {
+            content
+        }
+    }
 }

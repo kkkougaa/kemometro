@@ -37,6 +37,10 @@ final class TLStore: ObservableObject {
     @Published var writeTint: String { didSet { d.set(writeTint, forKey: k("write_tint")) } }
     /// 색 진하기 — 글래스 버튼과 하단 바 깔개에 같이 쓴다 (연하게 0.45 · 보통 0.7 · 진하게 1)
     @Published var tintStrength: Double { didSet { d.set(tintStrength, forKey: k("tint_strength")) } }
+    /// 하단 바 아이콘 색 (바 색에 맞춰 바꾼다)
+    @Published var tabIconTint: String { didSet { d.set(tabIconTint, forKey: k("tab_icon_tint")) } }
+    /// 하단 바 아이콘 아래 이름 보이기
+    @Published var tabLabels: Bool { didSet { d.set(tabLabels, forKey: k("tab_labels")) } }
     /// 말로 입력 엔진: device(기기 안) · soniox
     @Published var dictationEngine: String { didSet { d.set(dictationEngine, forKey: k("dictation_engine")) } }
     @Published var ttsModel: String { didSet { d.set(ttsModel.trimmed, forKey: k("gemini_tts_model")) } }
@@ -65,6 +69,8 @@ final class TLStore: ObservableObject {
         buttonTint = d.string(forKey: "tl.button_tint") ?? ""
         writeTint = d.string(forKey: "tl.write_tint") ?? TLStore.defaultWriteTint
         tintStrength = d.object(forKey: "tl.tint_strength") as? Double ?? 1
+        tabIconTint = d.string(forKey: "tl.tab_icon_tint") ?? "#FFFFFF"
+        tabLabels = d.object(forKey: "tl.tab_labels") as? Bool ?? true
         ttsModel = d.string(forKey: "tl.gemini_tts_model") ?? ""
         ttsVoice = d.string(forKey: "tl.gemini_tts_voice") ?? "Kore"
         ttsStyle = d.string(forKey: "tl.gemini_tts_style") ?? "natural"
