@@ -3,7 +3,11 @@
 역에 가까워지면 정해 둔 방면 열차가 몇 역 전인지 **라이브 액티비티**(다이내믹 아일랜드 + 잠금화면)로 떴다가 3분 뒤 사라지는 iOS 앱. 띄워 둔 동안 5초마다 갱신.
 기본값은 판교(신사행)·논현(광교행), 앱 안에서 역·방면·반경·시간을 바꿀 수 있다.
 
-맥이 없어도 된다. 빌드는 GitHub Actions 의 macOS 러너가 하고, 무서명 ipa 를 Sideloadly 로 무료 개발자 계정 서명해 넣는다.
+맥이 없어도 된다. 빌드는 GitHub Actions 의 macOS 러너가 한다.
+- `main` 에 합치면 팀 개발자 계정으로 정식 서명해 **TestFlight** 에 올린다 (번들 ID `com.kouga.kemometro`).
+  저장소 Secrets 에 `ASC_KEY_ID` · `ASC_ISSUER_ID` · `ASC_KEY_P8`(App Store Connect 팀 API 키 .p8 내용) · `APPLE_TEAM_ID` 가 있어야 한다. 없으면 무서명 ipa 만 남긴다.
+- 그 밖의 브랜치는 컴파일 확인만 한다.
+- 번역기는 [translate-kemo](https://github.com/kkkougaa/translate-kemo) 저장소로 따로 떨어져 나갔다.
 
 ## 구조
 

@@ -2,7 +2,7 @@
 # 로컬에 Xcode 가 없어도 이 파일과 소스만 있으면 된다.
 name: TrainLive
 options:
-  bundleIdPrefix: kr.neogul
+  bundleIdPrefix: com.kouga
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -14,7 +14,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1"
-    # 무서명 빌드. 서명은 Sideloadly 가 설치할 때 한다.
+    # 기본은 무서명(컴파일 확인). TestFlight 빌드는 CI 가 자동 서명으로 덮어쓴다.
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: ""
     CODE_SIGNING_ALLOWED: "NO"
@@ -42,6 +42,8 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIBackgroundModes: [location]
+        # HTTPS 외 암호화를 안 쓴다 — TestFlight 업로드 때 수출 규정 질문을 건너뛴다
+        ITSAppUsesNonExemptEncryption: false
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
         NSLocationWhenInUseUsageDescription: 역에 가까워졌는지 알기 위해 위치를 씁니다.
@@ -60,7 +62,7 @@ targets:
               NSIncludesSubdomains: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive
+        PRODUCT_BUNDLE_IDENTIFIER: com.kouga.kemometro
         PRODUCT_NAME: TrainLive
         INFOPLIST_KEY_CFBundleDisplayName: kemometro
         SWIFT_EMIT_LOC_STRINGS: "NO"
@@ -81,7 +83,7 @@ targets:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: kr.neogul.trainlive.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.kouga.kemometro.widget
         PRODUCT_NAME: TrainLiveWidget
         APPLICATION_EXTENSION_API_ONLY: "YES"
         SKIP_INSTALL: "YES"
